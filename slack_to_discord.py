@@ -93,6 +93,7 @@ def slack_channel_messages(d, channel_name):
         return m.group(0)
 
     messages = {}
+    file_ts_map = {}
     for file in sorted(glob.glob(os.path.join(d, channel_name, "*.json"))):
         with open(file, 'rb',) as fp:
             data = json.load(fp)
@@ -105,11 +106,28 @@ def slack_channel_messages(d, channel_name):
 
             ts = d["ts"]
 
-            # add bots to user map as they're discovered
             user_id = d.get("user")
-            if d.get("subtype", "").startswith("bot_") and "bot_id" in d and d["bot_id"] not in users:
+            subtype = d.get("subtype", "")
+            files = d.get("files", [])
+            thread_ts = d.get("thread_ts", ts)
+
+            # add bots to user map as they're discovered
+            if subtype.startswith("bot_") and "bot_id" in d and d["bot_id"] not in users:
                 users[d["bot_id"]] = d.get("username", "[unknown bot]")
                 user_id = d["bot_id"]
+
+            # Treat file comments as threads started on the message that posted the file
+            if subtype == "file_comment":
+                text = d["comment"]["comment"]
+                user_id = d["comment"]["user"]
+                file_id = d["file"]["id"]
+                thread_ts = file_ts_map.get(file_id, ts)
+                # remove the commented file from this messages's files
+                files = [x for x in files if x["id"] != file_id]
+
+            # Store a map of fileid to ts so file comments can be treated as replies
+            for f in files:
+                file_ts_map[f["id"]] = ts
 
             msg = {
                 "username": users.get(user_id, "[unknown]"),
@@ -127,17 +145,17 @@ def slack_channel_messages(d, channel_name):
                         "name": x["name"],
                         "url": x["url_private"]
                     }
-                    for x in d.get("files", [])
+                    for x in files
                 ],
             }
 
             # If this is a reply, add it to the parent message's replies
             # Replies have a "thread_ts" that differs from their "ts"
-            if d.get("thread_ts", ts) != ts:
-                if d["thread_ts"] not in messages:
+            if thread_ts != ts:
+                if thread_ts not in messages:
                     # Orphan thread message - skip it
                     continue
-                messages[d["thread_ts"]]["replies"][ts] = msg
+                messages[thread_ts]["replies"][ts] = msg
             else:
                 messages[ts] = msg
 
