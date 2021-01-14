@@ -21,6 +21,8 @@ TIME_FORMAT = "%H:%M"
 # Formatting options for messages
 THREAD_FORMAT = ">>>> {date} {time} <**{username}**> {text}"
 MSG_FORMAT = "{time} <**{username}**> {text}"
+ATTACHMENT_TITLE_TEXT = "<*uploaded a file*> {title}"
+ATTACHMENT_ERROR_APPEND = "\n<file downsized/omitted due to size restrictions. See original at <{url}>>"
 
 # Create a separator between dates? (None for no)
 DATE_SEPARATOR = "{:-^50}"
@@ -129,9 +131,12 @@ def slack_channel_messages(d, channel_name):
             for f in files:
                 file_ts_map[f["id"]] = ts
 
+            dt = datetime.fromtimestamp(float(ts))
             msg = {
                 "username": users.get(user_id, "[unknown]"),
-                "datetime": datetime.fromtimestamp(float(ts)),
+                "datetime": dt,
+                "time": dt.strftime(TIME_FORMAT),
+                "date": dt.strftime(DATE_FORMAT),
                 "text": text,
                 "replies": {},
                 "reactions": {
@@ -142,7 +147,9 @@ def slack_channel_messages(d, channel_name):
                 },
                 "files": [
                     {
-                        "name": x["name"],
+                        # Make sure names have the correct extension (can cause pictures to not be shown)
+                        "name": ("{name}" if x["name"].lower().endswith(".{filetype}".format(**x).lower()) else "{name}.{filetype}").format(**x),
+                        "title": x["title"],
                         "url": x["url_private"]
                     }
                     for x in files
@@ -165,16 +172,10 @@ def slack_channel_messages(d, channel_name):
         yield msg
 
 
-def make_files(msg):
-    for f in msg["files"]:
-        try:
-            data = urllib.request.urlopen(f["url"]).read()
-        except Exception:
-            continue
-        yield discord.File(fp=io.BytesIO(data), filename=f["name"])
+def make_discord_msgs(msg, is_reply):
 
+    msg_fmt = (THREAD_FORMAT if is_reply else MSG_FORMAT)
 
-def make_discord_msg(msg, is_reply):
     # Show reactions listed in an embed
     embed = None
     if msg["reactions"]:
@@ -184,15 +185,29 @@ def make_discord_msg(msg, is_reply):
             )
         )
 
-    # Format the date
-    msg["time"] = msg["datetime"].strftime(TIME_FORMAT)
-    msg["date"] = msg["datetime"].strftime(DATE_FORMAT)
+    # Send the original message without any files (only if there is any content in it)
+    if msg.get("text") or embed:
+        yield {
+            "content": msg_fmt.format(**msg),
+            "embed": embed,
+        }
 
-    return {
-        "content": (THREAD_FORMAT if is_reply else MSG_FORMAT).format(**msg),
-        "files": list(make_files(msg)),
-        "embed": embed,
-    }
+    # Send one messge per image that was posted (using the picture title as the message)
+    for f in msg["files"]:
+        content = msg_fmt.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)})
+
+        # Attempt to download the file from slack and re-upload it to Discord
+        # Fall back to adding the URL to the message
+        fileobj = None
+        try:
+            fileobj = discord.File(fp=io.BytesIO(urllib.request.urlopen(f["url"]).read()), filename=f["name"])
+        except Exception:
+            content += ATTACHMENT_ERROR_APPEND.format(*f)
+
+        yield {
+            "content": content,
+            "file": fileobj
+        }
 
 
 class MyClient(discord.Client):
@@ -226,34 +241,30 @@ class MyClient(discord.Client):
     async def _send_slack_msg(self, channel, msg, is_reply=False):
 
         if not is_reply and DATE_SEPARATOR:
-            msg_date = msg["datetime"].date()
+            msg_date = msg["date"]
             if (
                 not self._prev_msg or
-                self._prev_msg["datetime"].date() != msg_date
+                self._prev_msg["date"] != msg_date
             ):
-                await channel.send(
-                    content=DATE_SEPARATOR.format(
-                        msg_date.strftime(DATE_FORMAT)
-                    )
-                )
+                await channel.send(content=DATE_SEPARATOR.format(msg_date))
             self._prev_msg = msg
 
-        data = make_discord_msg(msg, is_reply)
-
-        with contextlib.suppress(discord.errors.HTTPException):
-            return await channel.send(**data)
-
-        if data["files"]:
-            # Files that are too big could cause errors
-            # Try again just linking them instead of uploading
-            data.pop("files")
-            data["content"] += "\n\nFiles:\n" + "\n".join(f["url"] for f in msg["files"])
-
+        for data in make_discord_msgs(msg, is_reply):
             with contextlib.suppress(discord.errors.HTTPException):
-                return await channel.send(**data)
+                await channel.send(**data)
+                continue
 
-        print("Failed to post message: <{username}> {text}".format(**msg))
-        return None
+            if data["file"]:
+                # Files that are too big could cause errors
+                # Try again just linking them instead
+                f = data.pop("file")
+                data["content"] += ATTACHMENT_ERROR_APPEND.format(*f)
+
+                with contextlib.suppress(discord.errors.HTTPException):
+                    await channel.send(**data)
+                    continue
+
+            print("Failed to post message: <{username}> {text}".format(**msg))
 
     async def _run_import(self, g):
         self._started = True
