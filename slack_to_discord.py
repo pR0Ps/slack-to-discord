@@ -296,23 +296,11 @@ class MyClient(discord.Client):
         existing_channels = {x.name: x for x in g.text_channels}
 
         for c in slack_channels(self._data_dir):
+            ch = None
 
             print("Processing channel {}...".format(c))
-            if c not in existing_channels:
-                if False: # TODO: What does a private channel look like in Slack's export?
-                    print("Creating private channel")
-                    overwrites = {
-                        g.default_role: discord.PermissionOverwrite(read_messages=False),
-                        g.me: discord.PermissionOverwrite(read_messages=True),
-                    }
-                    ch = await g.create_text_channel(c, overwrites=overwrites)
-                else:
-                    print("Creating public channel")
-                    ch = await g.create_text_channel(c)
-            else:
-                ch = existing_channels[c]
-
             print("Sending messages...", end="", flush=True)
+
             for msg in slack_channel_messages(self._data_dir, c, emoji_map):
                 # skip messages that are too early, stop when messages are too late
                 if self._end and msg["datetime"].date() > self._end:
@@ -320,6 +308,23 @@ class MyClient(discord.Client):
                 elif self._start and  msg["datetime"].date() < self._start:
                     continue
 
+                # Now that we have a message to send, get/create the channel to send it to
+                if ch is None:
+                    if c not in existing_channels:
+                        if False: # TODO: What does a private channel look like in Slack's export?
+                            print("Creating private channel")
+                            overwrites = {
+                                g.default_role: discord.PermissionOverwrite(read_messages=False),
+                                g.me: discord.PermissionOverwrite(read_messages=True),
+                            }
+                            ch = await g.create_text_channel(c, overwrites=overwrites)
+                        else:
+                            print("Creating public channel")
+                            ch = await g.create_text_channel(c)
+                    else:
+                        ch = existing_channels[c]
+
+                # Send message and threaded replies
                 await self._send_slack_msg(ch, msg)
                 for rmsg in msg["replies"]:
                     await self._send_slack_msg(ch, rmsg, is_reply=True)
