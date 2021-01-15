@@ -182,11 +182,12 @@ def slack_channel_messages(d, channel_name, emoji_map):
                 "files": [
                     {
                         # Make sure names have the correct extension (can cause pictures to not be shown)
-                        "name": ("{name}" if x["name"].lower().endswith(".{filetype}".format(**x).lower()) else "{name}.{filetype}").format(**x),
-                        "title": x["title"],
-                        "url": x["url_private"]
+                        "name": ("{name}" if f["name"].lower().endswith(".{filetype}".format(**f).lower()) else "{name}.{filetype}").format(**f),
+                        "title": f["title"],
+                        "url": f["url_private"],
+                        "thumbs": [f[t] for t in sorted((k for k in f if re.fullmatch("thumb_(\d+)", k)), key=lambda x: int(x.split("_")[-1]), reverse=True)]
                     }
-                    for x in files
+                    for f in files
                 ],
                 "events": events
             }
@@ -229,20 +230,37 @@ def make_discord_msgs(msg, is_reply):
 
     # Send one messge per image that was posted (using the picture title as the message)
     for f in msg["files"]:
-        content = msg_fmt.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)})
-
-        # Attempt to download the file from slack and re-upload it to Discord
-        # Fall back to adding the URL to the message
-        fileobj = None
-        try:
-            fileobj = discord.File(fp=io.BytesIO(urllib.request.urlopen(f["url"]).read()), filename=f["name"])
-        except Exception:
-            content += ATTACHMENT_ERROR_APPEND.format(*f)
-
         yield {
-            "content": content,
-            "file": fileobj
+            "content": msg_fmt.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)}),
+            "file_data": f
         }
+
+
+def file_upload_attempts(data):
+    # Files that are too big cause issues
+    # yield data to try to send (original, then thumbnails)
+    fd = data.pop("file_data", None)
+    if not fd:
+        yield data
+        return
+
+    for i, url in enumerate([fd["url"]] + fd.get("thumbs", [])):
+        with contextlib.suppress(Exception):
+            yield {
+                **data,
+                "file": discord.File(
+                    fp=io.BytesIO(urllib.request.urlopen(url).read()),
+                    filename=fd["name"]
+                )
+            }
+
+        if i < 1:
+            data["content"] += ATTACHMENT_ERROR_APPEND.format(**fd)
+
+    print("Failed to upload file for message '{}'".format(data["content"]))
+
+    # Just post the message without the attachment
+    yield data
 
 
 class MyClient(discord.Client):
@@ -285,21 +303,12 @@ class MyClient(discord.Client):
             self._prev_msg = msg
 
         for data in make_discord_msgs(msg, is_reply):
-            with contextlib.suppress(discord.errors.HTTPException):
-                await channel.send(**data)
-                continue
-
-            if data["file"]:
-                # Files that are too big could cause errors
-                # Try again just linking them instead
-                f = data.pop("file")
-                data["content"] += ATTACHMENT_ERROR_APPEND.format(*f)
-
-                with contextlib.suppress(discord.errors.HTTPException):
-                    await channel.send(**data)
-                    continue
-
-            print("Failed to post message: <{username}> {text}".format(**msg))
+            for attempt in file_upload_attempts(data):
+                with contextlib.suppress(Exception):
+                    await channel.send(**attempt)
+                    break
+            else:
+                print("Failed to post message: '{}'".format(data["content"]))
 
     async def _run_import(self, g):
         self._started = True
@@ -315,7 +324,7 @@ class MyClient(discord.Client):
             ch = None
 
             print("Processing channel {}...".format(c))
-            print("Sending messages...", end="", flush=True)
+            print("Sending messages...")
 
             for msg in slack_channel_messages(self._data_dir, c, emoji_map):
                 # skip messages that are too early, stop when messages are too late
