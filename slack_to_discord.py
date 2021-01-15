@@ -152,6 +152,10 @@ def slack_channel_messages(d, channel_name, emoji_map):
                 # remove the commented file from this messages's files
                 files = [x for x in files if x["id"] != file_id]
 
+            # Handle "/me <text>" commands (italicize)
+            elif subtype == "me_message":
+                text = "*{}*".format(text)
+
             # Handle setting channel topic
             elif subtype == "channel_topic":
                 text = "<*set the channel topic*>: {}".format(d["topic"])
