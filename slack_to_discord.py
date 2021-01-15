@@ -136,6 +136,7 @@ def slack_channel_messages(d, channel_name, emoji_map):
             subtype = d.get("subtype", "")
             files = d.get("files", [])
             thread_ts = d.get("thread_ts", ts)
+            events = {}
 
             # add bots to user map as they're discovered
             if subtype.startswith("bot_") and "bot_id" in d and d["bot_id"] not in users:
@@ -143,13 +144,18 @@ def slack_channel_messages(d, channel_name, emoji_map):
                 user_id = d["bot_id"]
 
             # Treat file comments as threads started on the message that posted the file
-            if subtype == "file_comment":
+            elif subtype == "file_comment":
                 text = d["comment"]["comment"]
                 user_id = d["comment"]["user"]
                 file_id = d["file"]["id"]
                 thread_ts = file_ts_map.get(file_id, ts)
                 # remove the commented file from this messages's files
                 files = [x for x in files if x["id"] != file_id]
+
+            # Handle setting channel topic
+            elif subtype == "channel_topic":
+                text = "<*set the channel topic*>: {}".format(d["topic"])
+                events["topic"] = d["topic"]
 
             # Store a map of fileid to ts so file comments can be treated as replies
             for f in files:
@@ -178,6 +184,7 @@ def slack_channel_messages(d, channel_name, emoji_map):
                     }
                     for x in files
                 ],
+                "events": events
             }
 
             # If this is a reply, add it to the parent message's replies
@@ -298,9 +305,9 @@ class MyClient(discord.Client):
 
         existing_channels = {x.name: x for x in g.text_channels}
 
-        for c, t in slack_channels(self._data_dir).items():
+        for c, init_topic in slack_channels(self._data_dir).items():
 
-            t = emoji_replace(t, emoji_map)
+            init_topic = emoji_replace(init_topic, emoji_map)
             ch = None
 
             print("Processing channel {}...".format(c))
@@ -322,12 +329,19 @@ class MyClient(discord.Client):
                                 g.default_role: discord.PermissionOverwrite(read_messages=False),
                                 g.me: discord.PermissionOverwrite(read_messages=True),
                             }
-                            ch = await g.create_text_channel(c, topic=t, overwrites=overwrites)
+                            ch = await g.create_text_channel(c, topic=init_topic, overwrites=overwrites)
                         else:
                             print("Creating public channel")
-                            ch = await g.create_text_channel(c, topic=t)
+                            ch = await g.create_text_channel(c, topic=init_topic)
                     else:
                         ch = existing_channels[c]
+
+                topic = msg["events"].get("topic", None)
+                if topic is not None and topic != ch.topic:
+                    # Note that the ratelimit is pretty extreme for this
+                    # (2 edits per 10 minutes) so it may take a while if there
+                    # a lot of topic changes
+                    await ch.edit(topic=topic)
 
                 # Send message and threaded replies
                 await self._send_slack_msg(ch, msg)
