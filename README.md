@@ -52,7 +52,7 @@ Instructions
 1. Export your data from Slack via <https://my.slack.com/services/export>
 2. Create a Discord bot (see <https://discordpy.readthedocs.io/en/latest/discord.html>) with the
    following permissions:
-    - Manage Channels (to create the imported channels)
+    - Manage Channels (to create the imported channels and change the topics of them)
     - Send Messages
     - Embed Links (to 'react' to messages - see 'Limitations' above)
     - Attach Files

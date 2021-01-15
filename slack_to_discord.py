@@ -93,7 +93,10 @@ def slack_usermap(d):
 def slack_channels(d):
     with open(os.path.join(d, "channels.json"), 'rb') as fp:
         data = json.load(fp)
-    return [x["name"] for x in data]
+    return {
+        x["name"]: "\n\n".join([x[k]["value"] for k in ("purpose", "topic") if x[k]["value"]])
+        for x in data
+    }
 
 
 def slack_channel_messages(d, channel_name, emoji_map):
@@ -295,7 +298,9 @@ class MyClient(discord.Client):
 
         existing_channels = {x.name: x for x in g.text_channels}
 
-        for c in slack_channels(self._data_dir):
+        for c, t in slack_channels(self._data_dir).items():
+
+            t = emoji_replace(t, emoji_map)
             ch = None
 
             print("Processing channel {}...".format(c))
@@ -317,10 +322,10 @@ class MyClient(discord.Client):
                                 g.default_role: discord.PermissionOverwrite(read_messages=False),
                                 g.me: discord.PermissionOverwrite(read_messages=True),
                             }
-                            ch = await g.create_text_channel(c, overwrites=overwrites)
+                            ch = await g.create_text_channel(c, topic=t, overwrites=overwrites)
                         else:
                             print("Creating public channel")
-                            ch = await g.create_text_channel(c)
+                            ch = await g.create_text_channel(c, topic=t)
                     else:
                         ch = existing_channels[c]
 
