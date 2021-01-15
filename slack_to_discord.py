@@ -237,7 +237,7 @@ class MyClient(discord.Client):
         self._data_dir = data_dir
         self._guild_name = guild_name
         self._prev_msg = None
-        self._start, self._end = [datetime.strptime(x, DATE_FORMAT) if x else None for x in (start, end)]
+        self._start, self._end = [datetime.strptime(x, DATE_FORMAT).date() if x else None for x in (start, end)]
 
         self._started = False # TODO: async equiv of a threading.event
         super().__init__(*args, **kwargs)
@@ -315,9 +315,9 @@ class MyClient(discord.Client):
             print("Sending messages...", end="", flush=True)
             for msg in slack_channel_messages(self._data_dir, c, emoji_map):
                 # skip messages that are too early, stop when messages are too late
-                if self._end and msg["datetime"] > self._end:
+                if self._end and msg["datetime"].date() > self._end:
                     break
-                elif self._start and  msg["datetime"] < self._start:
+                elif self._start and  msg["datetime"].date() < self._start:
                     continue
 
                 await self._send_slack_msg(ch, msg)
