@@ -29,38 +29,59 @@ DATE_SEPARATOR = "{:-^50}"
 
 MENTION_RE = re.compile(r"<([@!#])([^>]*?)(?:\|([^>]*?))?>")
 LINK_RE = re.compile(r"<((?:https?|mailto|tel):[A-Za-z0-9_\+\.\-\/\?\,\=\#\:\@\(\)]+)\|([^>]+)>")
-EMOJI_RE = re.compile(r":([^ /<>:])([^ /<>:]+):")
+EMOJI_RE = re.compile(r":([^ /<>:]+):(?::skin-tone-(\d):)?")
 
 
-def emoji_replace(s):
-    # Convert -'s to "_"s except when in the 1st char like :-1:
-    # This fixes things like ":woman_shrugging:" being ":woman-shrugging:" on Slack
-    s = EMOJI_RE.sub(lambda x: ":{}{}:".format(x.group(1), x.group(2).replace("-", "_")) , s)
+# Map Slack emojis to Discord's versions
+# Note that dashes will have been converted to underscores before this is processed
+GLOBAL_EMOJI_MAP = {
+    "thumbsup_all": "thumbsup",
+    "facepunch": "punch",
+    "the_horns": "sign_of_the_horns",
+    "simple_smile": "slightly_smiling_face",
+    "clinking_glasses": "champagne_glass",
+    "tornado": "cloud_with_tornado",
+    "car": "red_car",
+    "us": "flag_us",
+    "snow_cloud": "cloud_with_snow",
+    "snowman": "snowman2",
+    "snowman_without_snow": "snowman",
+    "crossed_fingers": "fingers_crossed",
+    "hocho": "knife",
+    "waving_black_flag": "flag_black",
+    "waving_white_flag": "flag_white",
+    "woman_heart_man": "couple_with_heart_woman_man",
+    "man_heart_man": "couple_with_heart_mm",
+    "woman_heart_woman": "couple_with_heart_ww",
+    "man_kiss_man": "couplekiss_mm",
+    "woman_kiss_woman": "couplekiss_ww",
+}
 
-    # Custom substitutions (generalize these if possible)
-    s = (s
-            .replace(":thumbsup_all:", ":thumbsup:")
-            .replace(":facepunch:", ":punch:")
-            .replace(":the_horns:", ":sign_of_the_horns:")
-            .replace(":simple_smile:", ":slightly_smiling_face:")
-            .replace(":clinking_glasses:", ":champagne_glass:")
-            .replace(":tornado:", ":cloud_with_tornado:")
-            .replace(":car:", ":red_car:")
-            .replace(":us:", ":flag_us:")
-            .replace(":snow_cloud:", ":cloud_with_snow:")
-            .replace(":snowman:", ":snowman2:")
-            .replace(":snowman_without_snow:", ":snowman:")
-            .replace(":crossed_fingers:", ":fingers_crossed:")
-            .replace(":hocho:", ":knife:")
-            .replace(":waving_black_flag:", ":flag_black:")
-            .replace(":waving_white_flag:", ":flag_white:")
-            .replace(":woman_heart_man:", ":couple_with_heart_woman_man:")
-            .replace(":man_heart_man:", ":couple_with_heart_mm:")
-            .replace(":woman_heart_woman:", ":couple_with_heart_ww:")
-            .replace(":man_kiss_man:", ":couplekiss_mm:")
-            .replace(":woman_kiss_woman:", ":couplekiss_ww:")
-        )
-    return s
+def emoji_replace(s, emoji_map):
+    def replace(match):
+        e, t = match.groups()
+
+        # Emojis in the emoji_map already have bounding :'s and can't have skin
+        # tones applied to them so just directly return them.
+        if e in emoji_map:
+            return emoji_map[e]
+
+        # Convert -'s to "_"s except the 1st char (ex. :-1:)
+        # On Slack some emojis use underscores and some use dashes
+        # On Discord everything uses underscores
+        if len(e) > 1 and "-" in e[1:]:
+            e = e[0] + e[1:].replace("-", "_")
+
+        if e in GLOBAL_EMOJI_MAP:
+            e = GLOBAL_EMOJI_MAP[e]
+
+        # Convert Slack's skin tone system to Discord's
+        if t is not None:
+            return ":{}_tone{}:".format(e, int(t)-1)
+        else:
+            return ":{}:".format(e)
+
+    return EMOJI_RE.sub(replace, s)
 
 
 def slack_usermap(d):
@@ -75,7 +96,7 @@ def slack_channels(d):
     return [x["name"] for x in data]
 
 
-def slack_channel_messages(d, channel_name):
+def slack_channel_messages(d, channel_name, emoji_map):
     users = slack_usermap(d)
 
     def mention_repl(m):
@@ -103,7 +124,7 @@ def slack_channel_messages(d, channel_name):
             text = d["text"]
             text = MENTION_RE.sub(mention_repl, text)
             text = LINK_RE.sub(lambda x: x.group(1), text)
-            text = emoji_replace(text)
+            text = emoji_replace(text, emoji_map)
             text = html.unescape(text)
 
             ts = d["ts"]
@@ -140,7 +161,7 @@ def slack_channel_messages(d, channel_name):
                 "text": text,
                 "replies": {},
                 "reactions": {
-                    emoji_replace(":{}:".format(x["name"])): [
+                    emoji_replace(":{}:".format(x["name"]), emoji_map): [
                         users.get(u, "[unknown]") for u in x["users"]
                     ]
                     for x in d.get("reactions", [])
@@ -268,9 +289,8 @@ class MyClient(discord.Client):
 
     async def _run_import(self, g):
         self._started = True
-        # TODO: integrate into emoji_replace (emoji_replace can be in the Client to check self.emoji. slack_channel_messages too)
-        print(self.emojis)
-        print([str(x) for x in self.emojis])
+        emoji_map = {x.name: str(x) for x in self.emojis}
+
         print("Importing messages...")
 
         existing_channels = {x.name: x for x in g.text_channels}
@@ -293,7 +313,7 @@ class MyClient(discord.Client):
                 ch = existing_channels[c]
 
             print("Sending messages...", end="", flush=True)
-            for msg in slack_channel_messages(self._data_dir, c):
+            for msg in slack_channel_messages(self._data_dir, c, emoji_map):
                 # skip messages that are too early, stop when messages are too late
                 if self._end and msg["datetime"] > self._end:
                     break
