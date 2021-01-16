@@ -238,19 +238,29 @@ def make_discord_msgs(msg, is_reply):
             )
         )
 
-    # Send the original message without any files (only if there is any content in it)
-    if msg.get("text") or embed:
+    # Send the original message without any files
+    if len(msg["files"]) == 1:
+        # if there is a single file attached, put reactions on the the file
+        if msg.get("text"):
+            yield {
+                "content": msg_fmt.format(**msg),
+            }
+    elif msg.get("text") or embed:
+        # for no/multiple files, put reactions on the message (even if blank)
         yield {
             "content": msg_fmt.format(**msg),
             "embed": embed,
         }
+        embed = None
 
     # Send one messge per image that was posted (using the picture title as the message)
     for f in msg["files"]:
         yield {
             "content": msg_fmt.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)}),
-            "file_data": f
+            "file_data": f,
+            "embed": embed
         }
+        embed = None
 
 
 def file_upload_attempts(data):
