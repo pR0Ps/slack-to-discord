@@ -320,6 +320,7 @@ class MyClient(discord.Client):
         emoji_map = {x.name: str(x) for x in self.emojis}
 
         print("Importing messages...")
+        c_chan, c_msg, start_time = 0, 0, datetime.now()
 
         existing_channels = {x.name: x for x in g.text_channels}
 
@@ -353,6 +354,7 @@ class MyClient(discord.Client):
                             ch = await g.create_text_channel(c, topic=init_topic)
                     else:
                         ch = existing_channels[c]
+                    c_chan += 1
 
                 topic = msg["events"].get("topic", None)
                 if topic is not None and topic != ch.topic:
@@ -363,9 +365,12 @@ class MyClient(discord.Client):
 
                 # Send message and threaded replies
                 await self._send_slack_msg(ch, msg)
+                c_msg += 1
                 for rmsg in msg["replies"]:
                     await self._send_slack_msg(ch, rmsg, is_reply=True)
+                    c_msg += 1
             print("Done!")
+        print("Imported {} messages into {} channel(s) in {}".format(c_msg, c_chan, datetime.now()-start_time))
 
 def main():
     parser = argparse.ArgumentParser(

@@ -7,7 +7,7 @@ This tool takes a Slack export file and imports it into Discord.
 
 Capabilities
 ------------
-- Import complete message history (tested with an import of TODO messages)
+- Import complete message history (tested with an import of just over 10,000 messages)
 - Handles private channels (if they're included in your Slack export)
 - Handles images and other files (falls back to linking to the files hosted by Slack if they're too
   big to upload)
@@ -59,6 +59,6 @@ Instructions
 3. Install `slack-to-discord` using `pip` (`pip install git+https://github.com/pR0Ps/slack-to-discord`)
 4. Run `slack-to-discord --zipfile <slack export zip> --guild <guild name> --token <bot token>` 
 5. Wait. The program will exit once the import is finished. Due to Discord rate limits, the import
-   process could take a while (TODO time for an import of TODO messages)
+   process will take a while (speed was roughly 50 messages/min for me)
 6. Inspect the imported history.
 7. Invite your users.
