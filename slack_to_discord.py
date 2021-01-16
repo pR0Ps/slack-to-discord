@@ -87,8 +87,10 @@ def emoji_replace(s, emoji_map):
 def slack_usermap(d):
     with open(os.path.join(d, "users.json"), 'rb') as fp:
         data = json.load(fp)
-    return {x["id"]: x["name"] for x in data}
-
+    r = {x["id"]: x["name"] for x in data}
+    r["USLACKBOT"] = "Slackbot"
+    r["B01"] = "Slackbot"
+    return r
 
 def slack_channels(d):
     with open(os.path.join(d, "channels.json"), 'rb') as fp:
