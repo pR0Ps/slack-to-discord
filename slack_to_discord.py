@@ -161,10 +161,22 @@ def slack_channel_messages(d, channel_name, emoji_map):
             elif subtype == "reminder_add":
                 text = "<*{}*>".format(text.strip())
 
-            # Handle setting channel topic
-            elif subtype == "channel_topic":
-                text = "<*set the channel topic*>: {}".format(d["topic"])
-                events["topic"] = d["topic"]
+            # Handle channel operations
+            elif subtype == "channel_join":
+                text = "<*joined the channel*>"
+            elif subtype == "channel_leave":
+                text = "<*left the channel*>"
+            elif subtype == "channel_archive":
+                text = "<*archived the channel*>"
+
+            # Handle setting channel topic/purpose
+            elif subtype == "channel_topic" or subtype == "channel_purpose":
+                events["topic"] = d.get("topic", d.get("purpose"))
+                if events["topic"]:
+                    text = "<*set the channel topic*>: {}".format(events["topic"])
+                else:
+                    text = "<*cleared the channel topic*>"
+
 
             # Store a map of fileid to ts so file comments can be treated as replies
             for f in files:
