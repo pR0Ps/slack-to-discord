@@ -158,6 +158,9 @@ def slack_channel_messages(d, channel_name, emoji_map):
             elif subtype == "me_message":
                 text = "*{}*".format(text)
 
+            elif subtype == "reminder_add":
+                text = "<*{}*>".format(text.strip())
+
             # Handle setting channel topic
             elif subtype == "channel_topic":
                 text = "<*set the channel topic*>: {}".format(d["topic"])
