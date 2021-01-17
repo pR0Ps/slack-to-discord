@@ -10,6 +10,7 @@ import tempfile
 import urllib
 import zipfile
 from datetime import datetime
+from urllib.parse import urlparse
 
 import discord
 
@@ -22,7 +23,7 @@ TIME_FORMAT = "%H:%M"
 THREAD_FORMAT = ">>>> {date} {time} <**{username}**> {text}"
 MSG_FORMAT = "{time} <**{username}**> {text}"
 ATTACHMENT_TITLE_TEXT = "<*uploaded a file*> {title}"
-ATTACHMENT_ERROR_APPEND = "\n<file downsized/omitted due to size restrictions. See original at <{url}>>"
+ATTACHMENT_ERROR_APPEND = "\n<file thumbnail used due to size restrictions. See original at <{url}>>"
 
 # Create a separator between dates? (None for no)
 DATE_SEPARATOR = "{:-^50}"
@@ -103,8 +104,8 @@ def slack_channels(d):
     }
 
 
-def slack_filename(f):
-    # Make sure filename have the correct extension
+def slack_filedata(f):
+    # Make sure the filename has the correct extension
     # Not fixing these issues can cause pictures to not be shown
     ft = f["filetype"]
     name, *ext = f["name"].rsplit(".", 1)
@@ -120,7 +121,17 @@ def slack_filename(f):
         name = "{}.{}".format(name, ext)
         ext = ft
 
-    return "{}.{}".format(name, ext)
+    # Make a list of thumbnails for this file in case the original can't be posted
+    thumbs = [f[t] for t in sorted((k for k in f if re.fullmatch("thumb_(\d+)", k)), key=lambda x: int(x.split("_")[-1]), reverse=True)]
+    if "thumb_video" in f:
+        thumbs.append(f["thumb_video"])
+
+    return {
+        "name": "{}.{}".format(name, ext),
+        "title": f["title"],
+        "url": f["url_private"],
+        "thumbs": thumbs
+    }
 
 
 def slack_channel_messages(d, channel_name, emoji_map):
@@ -219,15 +230,7 @@ def slack_channel_messages(d, channel_name, emoji_map):
                     ]
                     for x in d.get("reactions", [])
                 },
-                "files": [
-                    {
-                        "name": slack_filename(f),
-                        "title": f["title"],
-                        "url": f["url_private"],
-                        "thumbs": [f[t] for t in sorted((k for k in f if re.fullmatch("thumb_(\d+)", k)), key=lambda x: int(x.split("_")[-1]), reverse=True)]
-                    }
-                    for f in files
-                ],
+                "files": [slack_filedata(f) for f in files],
                 "events": events
             }
 
@@ -294,15 +297,26 @@ def file_upload_attempts(data):
         return
 
     for i, url in enumerate([fd["url"]] + fd.get("thumbs", [])):
-        with contextlib.suppress(Exception):
+        if i > 0:
+            # Trying thumbnails - get the filename from Slack (it has the correct extension)
+            filename = urlparse(url).path.rsplit("/", 1)[-1]
+        else:
+            filename = fd["name"]
+
+        try:
+            f = discord.File(
+                fp=io.BytesIO(urllib.request.urlopen(url).read()),
+                filename=filename
+            )
+        except Exception:
+            pass
+        else:
             yield {
                 **data,
-                "file": discord.File(
-                    fp=io.BytesIO(urllib.request.urlopen(url).read()),
-                    filename=fd["name"]
-                )
+                "file": f
             }
 
+        # The original URL failed - trying thumbnails
         if i < 1:
             data["content"] += ATTACHMENT_ERROR_APPEND.format(**fd)
 
