@@ -57,6 +57,7 @@ GLOBAL_EMOJI_MAP = {
     "woman_kiss_woman": "couplekiss_ww",
 }
 
+
 def emoji_replace(s, emoji_map):
     def replace(match):
         e, t = match.groups()
@@ -92,6 +93,7 @@ def slack_usermap(d):
     r["B01"] = "Slackbot"
     return r
 
+
 def slack_channels(d):
     with open(os.path.join(d, "channels.json"), 'rb') as fp:
         data = json.load(fp)
@@ -99,6 +101,26 @@ def slack_channels(d):
         x["name"]: "\n\n".join([x[k]["value"] for k in ("purpose", "topic") if x[k]["value"]])
         for x in data
     }
+
+
+def slack_filename(f):
+    # Make sure filename have the correct extension
+    # Not fixing these issues can cause pictures to not be shown
+    ft = f["filetype"]
+    name, *ext = f["name"].rsplit(".", 1)
+    if not name:
+        name = "unknown"
+
+    ext = ext[0] if ext else None
+    if not ext:
+        # Add missing extension
+        ext = ft
+    elif ext.lower() != ft.lower():
+        # Fix incorrect extension
+        name = "{}.{}".format(name, ext)
+        ext = ft
+
+    return "{}.{}".format(name, ext)
 
 
 def slack_channel_messages(d, channel_name, emoji_map):
@@ -199,8 +221,7 @@ def slack_channel_messages(d, channel_name, emoji_map):
                 },
                 "files": [
                     {
-                        # Make sure names have the correct extension (can cause pictures to not be shown)
-                        "name": ("{name}" if f["name"].lower().endswith(".{filetype}".format(**f).lower()) else "{name}.{filetype}").format(**f),
+                        "name": slack_filename(f),
                         "title": f["title"],
                         "url": f["url_private"],
                         "thumbs": [f[t] for t in sorted((k for k in f if re.fullmatch("thumb_(\d+)", k)), key=lambda x: int(x.split("_")[-1]), reverse=True)]
