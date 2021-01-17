@@ -131,6 +131,7 @@ def slack_channel_messages(d, channel_name, emoji_map):
             text = LINK_RE.sub(lambda x: x.group(1), text)
             text = emoji_replace(text, emoji_map)
             text = html.unescape(text)
+            text = text.rstrip()
 
             ts = d["ts"]
 
