@@ -98,8 +98,15 @@ def slack_usermap(d):
 def slack_channels(d):
     with open(os.path.join(d, "channels.json"), 'rb') as fp:
         data = json.load(fp)
+
+    topic = lambda x: "\n\n".join([x[k]["value"] for k in ("purpose", "topic") if x[k]["value"]])
+
+    # TODO: verify this works
+    # (this is a guess based on API docs since I couldn't get a private data export from Slack)
+    is_private = lambda x: x.get("is_private", False)
+
     return {
-        x["name"]: "\n\n".join([x[k]["value"] for k in ("purpose", "topic") if x[k]["value"]])
+        x["name"]: (topic(x), is_private(x))
         for x in data
     }
 
@@ -382,7 +389,7 @@ class MyClient(discord.Client):
 
         existing_channels = {x.name: x for x in g.text_channels}
 
-        for c, init_topic in slack_channels(self._data_dir).items():
+        for c, (init_topic, is_private) in slack_channels(self._data_dir).items():
 
             init_topic = emoji_replace(init_topic, emoji_map)
             ch = None
@@ -400,7 +407,7 @@ class MyClient(discord.Client):
                 # Now that we have a message to send, get/create the channel to send it to
                 if ch is None:
                     if c not in existing_channels:
-                        if False: # TODO: What does a private channel look like in Slack's export?
+                        if is_private:
                             print("Creating private channel")
                             overwrites = {
                                 g.default_role: discord.PermissionOverwrite(read_messages=False),
