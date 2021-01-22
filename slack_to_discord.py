@@ -13,6 +13,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 
 import discord
+from discord.errors import Forbidden
 
 
 # Date and time formats
@@ -100,13 +101,14 @@ def slack_channels(d):
         data = json.load(fp)
 
     topic = lambda x: "\n\n".join([x[k]["value"] for k in ("purpose", "topic") if x[k]["value"]])
+    pins = lambda x: set(p["id"] for p in x.get("pins", []))
 
     # TODO: verify this works
     # (this is a guess based on API docs since I couldn't get a private data export from Slack)
     is_private = lambda x: x.get("is_private", False)
 
     return {
-        x["name"]: (topic(x), is_private(x))
+        x["name"]: (topic(x), is_private(x), pins(x))
         for x in data
     }
 
@@ -141,7 +143,7 @@ def slack_filedata(f):
     }
 
 
-def slack_channel_messages(d, channel_name, emoji_map):
+def slack_channel_messages(d, channel_name, emoji_map, pins):
     users = slack_usermap(d)
 
     def mention_repl(m):
@@ -218,6 +220,8 @@ def slack_channel_messages(d, channel_name, emoji_map):
                 else:
                     text = "<*cleared the channel topic*>"
 
+            if ts in pins:
+                events["pin"] = True
 
             # Store a map of fileid to ts so file comments can be treated as replies
             for f in files:
@@ -372,10 +376,16 @@ class MyClient(discord.Client):
                 await channel.send(content=DATE_SEPARATOR.format(msg_date))
             self._prev_msg = msg
 
+        pin = msg["events"].pop("pin", False)
         for data in make_discord_msgs(msg, is_reply):
             for attempt in file_upload_attempts(data):
                 with contextlib.suppress(Exception):
-                    await channel.send(**attempt)
+                    msg = await channel.send(**attempt)
+                    if pin:
+                        pin = False
+                        # Requires the "manage messages" optional permission
+                        with contextlib.suppress(Forbidden):
+                            await msg.pin()
                     break
             else:
                 print("Failed to post message: '{}'".format(data["content"]))
@@ -389,7 +399,7 @@ class MyClient(discord.Client):
 
         existing_channels = {x.name: x for x in g.text_channels}
 
-        for c, (init_topic, is_private) in slack_channels(self._data_dir).items():
+        for c, (init_topic, is_private, pins) in slack_channels(self._data_dir).items():
 
             init_topic = emoji_replace(init_topic, emoji_map)
             ch = None
@@ -397,7 +407,7 @@ class MyClient(discord.Client):
             print("Processing channel {}...".format(c))
             print("Sending messages...")
 
-            for msg in slack_channel_messages(self._data_dir, c, emoji_map):
+            for msg in slack_channel_messages(self._data_dir, c, emoji_map, pins):
                 # skip messages that are too early, stop when messages are too late
                 if self._end and msg["datetime"].date() > self._end:
                     break

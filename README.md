@@ -15,6 +15,7 @@ Capabilities
   to Discord before importing)
 - Preserves threaded conversations (threaded messages are displayed after the parent message and
   indented)
+- Preserves pinned messages.
 - Day boundaries between messages are marked by a `--------YYYY-MM-DD--------` message and each
   message is prefixed by the time it was sent.
 
@@ -53,6 +54,7 @@ Instructions
 2. Create a Discord bot (see <https://discordpy.readthedocs.io/en/latest/discord.html>) with the
    following permissions:
     - Manage Channels (to create the imported channels and change the topics of them)
+    - Manage Messages - to pin messages [optional]
     - Send Messages
     - Embed Links (to 'react' to messages - see 'Limitations' above)
     - Attach Files
