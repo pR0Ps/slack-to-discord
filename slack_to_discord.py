@@ -237,7 +237,8 @@ def slack_channel_messages(d, channel_name, emoji_map, pins):
                 "replies": {},
                 "reactions": {
                     emoji_replace(":{}:".format(x["name"]), emoji_map): [
-                        users.get(u, "[unknown]") for u in x["users"]
+                        users.get(u, "[unknown]").replace("_", "\\_")
+                        for u in x["users"]
                     ]
                     for x in d.get("reactions", [])
                 },
