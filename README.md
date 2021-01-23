@@ -1,20 +1,20 @@
 slack-to-discord
 ================
 
-This tool takes a Slack export file and imports it into Discord.
+This tool takes a Slack export file and imports it into a Discord server
 
-[TODO](!screenshot)
+![Demonstration](demo.png)
 
 Capabilities
 ------------
-- Import complete message history (tested with an import of just over 10,000 messages)
-- Handles private channels (if they're included in your Slack export)
+- Import complete message history (tested with an import of just over 10,000 messages).
+- Handles private channels (if they're included in your Slack export).
 - Handles images and other files (falls back to linking to the files hosted by Slack if they're too
-  big to upload)
+  big to upload).
 - Preserves emojis and reactions to messages (custom emojis will work, but need to be manually added
-  to Discord before importing)
+  to Discord before importing).
 - Preserves threaded conversations (threaded messages are displayed after the parent message and
-  indented)
+  indented).
 - Preserves pinned messages.
 - Day boundaries between messages are marked by a `--------YYYY-MM-DD--------` message and each
   message is prefixed by the time it was sent.
@@ -59,7 +59,8 @@ Instructions
     - Embed Links (to 'react' to messages - see 'Limitations' above)
     - Attach Files
 3. Install `slack-to-discord` using `pip` (`pip install git+https://github.com/pR0Ps/slack-to-discord`)
-4. Run `slack-to-discord --zipfile <slack export zip> --guild <guild name> --token <bot token>` 
+4. Run `slack-to-discord --zipfile <slack export zip> --guild <guild name> --token <bot token>`
+   (check `slack-to-discord --help` for other options).
 5. Wait. The program will exit once the import is finished. Due to Discord rate limits, the import
    process will take a while (speed was roughly 50 messages/min for me)
 6. Inspect the imported history.
