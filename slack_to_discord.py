@@ -340,10 +340,11 @@ def file_upload_attempts(data):
 
 class MyClient(discord.Client):
 
-    def __init__(self, *args, data_dir, guild_name, start, end, **kwargs):
+    def __init__(self, *args, data_dir, guild_name, all_private, start, end, **kwargs):
         self._data_dir = data_dir
         self._guild_name = guild_name
         self._prev_msg = None
+        self._all_private = all_private
         self._start, self._end = [datetime.strptime(x, DATE_FORMAT).date() if x else None for x in (start, end)]
 
         self._started = False # TODO: async equiv of a threading.event
@@ -418,7 +419,7 @@ class MyClient(discord.Client):
                 # Now that we have a message to send, get/create the channel to send it to
                 if ch is None:
                     if c not in existing_channels:
-                        if is_private:
+                        if self._all_private or is_private:
                             print("Creating private channel")
                             overwrites = {
                                 g.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -457,6 +458,8 @@ def main():
     parser.add_argument("-t", "--token", help="The Discord bot token", required=True)
     parser.add_argument("-s", "--start", help="The date to start importing from", required=False, default=None)
     parser.add_argument("-e", "--end", help="The date to end importing at", required=False, default=None)
+    parser.add_argument("-p", "--all-private", help="Import all channels as private channels in Discord", action="store_true", default=False)
+
     args = parser.parse_args()
 
     print("Extracting zipfile...", end="", flush=True)
@@ -466,7 +469,13 @@ def main():
         print("Done!")
 
         print("Logging the bot into Discord...", end="", flush=True)
-        client = MyClient(data_dir=t, guild_name=args.guild, start=args.start, end=args.end)
+        client = MyClient(
+            data_dir=t,
+            guild_name=args.guild,
+            all_private=args.all_private,
+            start=args.start,
+            end=args.end
+        )
         client.run(args.token)
 
 if __name__ == "__main__":
