@@ -17,16 +17,17 @@ from urllib.parse import urlparse
 import discord
 from discord.errors import Forbidden
 
-# Max size of message to send to Discord
+# Discord size limits
 MAX_MESSAGE_SIZE = 2000
+MAX_THREADNAME_SIZE = 100
 
 # Date and time formats
 DATE_FORMAT = "%Y-%m-%d"
 TIME_FORMAT = "%H:%M"
 
 # Formatting options for messages
-THREAD_FORMAT = ">>>> {date} {time} <**{username}**> {text}"
 MSG_FORMAT = "{time} <**{username}**> {text}"
+BACKUP_THREAD_NAME = "{date} {time}"  # used when the message to create the thread from has no text
 ATTACHMENT_TITLE_TEXT = "<*uploaded a file*> {title}"
 ATTACHMENT_ERROR_APPEND = "\n<file thumbnail used due to size restrictions. See original at <{url}>>"
 
@@ -279,9 +280,7 @@ def mark_end(iterable):
         yield True, a
 
 
-def make_discord_msgs(msg, is_reply):
-
-    msg_fmt = (THREAD_FORMAT if is_reply else MSG_FORMAT)
+def make_discord_msgs(msg):
 
     # Show reactions listed in an embed
     embed = None
@@ -295,14 +294,14 @@ def make_discord_msgs(msg, is_reply):
     # Split the text into chunks to keep it under MAX_MESSAGE_SIZE
     # Send everything except the last chunk
     content = None
-    prefix_len = len(msg_fmt.format(**{**msg, "text": ""}))
+    prefix_len = len(MSG_FORMAT.format(**{**msg, "text": ""}))
     for is_last, chunk in mark_end(textwrap.wrap(
         text=msg.get("text") or "",
         width=MAX_MESSAGE_SIZE - prefix_len,
         drop_whitespace=False,
         replace_whitespace=False
     )):
-        content = msg_fmt.format(**{**msg, "text": chunk.strip()})
+        content = MSG_FORMAT.format(**{**msg, "text": chunk.strip()})
         if not is_last:
             yield {
                 "content": content
@@ -326,7 +325,7 @@ def make_discord_msgs(msg, is_reply):
     # Send one messge per image that was posted (using the picture title as the message)
     for f in msg["files"]:
         yield {
-            "content": msg_fmt.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)}),
+            "content": MSG_FORMAT.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)}),
             "file_data": f,
             "embed": embed
         }
@@ -407,30 +406,33 @@ class MyClient(discord.Client):
             await self.close()
 
 
-    async def _send_slack_msg(self, channel, msg, is_reply=False):
+    async def _send_slack_msg(self, target, msg):
 
-        if not is_reply and DATE_SEPARATOR:
+        if DATE_SEPARATOR:
             msg_date = msg["date"]
             if (
                 not self._prev_msg or
                 self._prev_msg["date"] != msg_date
             ):
-                await channel.send(content=DATE_SEPARATOR.format(msg_date))
+                await target.send(content=DATE_SEPARATOR.format(msg_date))
             self._prev_msg = msg
 
+        sent = None
         pin = msg["events"].pop("pin", False)
-        for data in make_discord_msgs(msg, is_reply):
+        for data in make_discord_msgs(msg):
             for attempt in file_upload_attempts(data):
                 with contextlib.suppress(Exception):
-                    msg = await channel.send(**attempt)
+                    sent = await target.send(**attempt)
                     if pin:
                         pin = False
                         # Requires the "manage messages" optional permission
                         with contextlib.suppress(Forbidden):
-                            await msg.pin()
+                            await sent.pin()
                     break
             else:
                 print("Failed to post message: '{}'".format(data["content"]))
+
+        return sent
 
     async def _run_import(self, g):
         self._started = True
@@ -481,11 +483,17 @@ class MyClient(discord.Client):
                     await ch.edit(topic=topic)
 
                 # Send message and threaded replies
-                await self._send_slack_msg(ch, msg)
+                sent = await self._send_slack_msg(ch, msg)
                 c_msg += 1
-                for rmsg in msg["replies"]:
-                    await self._send_slack_msg(ch, rmsg, is_reply=True)
-                    c_msg += 1
+                if sent and msg["replies"]:
+                    thread_name = (
+                        textwrap.wrap(msg.get("text") or "", max_lines=1, width=MAX_THREADNAME_SIZE, placeholder="…") or
+                        [BACKUP_THREAD_NAME.format(**msg).replace(":", "-")]  # ':' is not allowed in thread names
+                    )[0]
+                    thread = await sent.create_thread(name=thread_name)
+                    for rmsg in msg["replies"]:
+                        await self._send_slack_msg(thread, rmsg)
+                        c_msg += 1
             print("Done!")
         print("Imported {} messages into {} channel(s) in {}".format(c_msg, c_chan, datetime.now()-start_time))
 

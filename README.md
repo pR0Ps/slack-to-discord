@@ -13,8 +13,7 @@ Capabilities
   big to upload).
 - Preserves emojis and reactions to messages (custom emojis will work, but need to be manually added
   to Discord before importing).
-- Preserves threaded conversations (threaded messages are displayed after the parent message and
-  indented).
+- Preserves threaded conversations.
 - Preserves pinned messages.
 - Day boundaries between messages are marked by a `--------YYYY-MM-DD--------` message and each
   message is prefixed by the time it was sent.
@@ -55,11 +54,13 @@ Instructions
 1. Export your data from Slack via <https://my.slack.com/services/export>
 2. Create a Discord bot (see <https://discordpy.readthedocs.io/en/latest/discord.html>) with the
    following permissions:
-    - Manage Channels (to create the imported channels and change the topics of them)
-    - Manage Messages - to pin messages [optional]
+    - Manage Channels - to create the imported channels and change the topics of them
     - Send Messages
+    - Create Public Threads
+    - Send Messages in Threads
     - Embed Links (to 'react' to messages - see 'Limitations' above)
     - Attach Files
+    - Manage Messages - to pin messages [optional]
 3. Install `slack-to-discord` using `pip` (`pip install git+https://github.com/pR0Ps/slack-to-discord`)
 4. Run `slack-to-discord --zipfile <slack export zip> --guild <guild name> --token <bot token>`
    (check `slack-to-discord --help` for other options).
