@@ -8,6 +8,7 @@ import os
 import re
 import tempfile
 import textwrap
+import traceback
 import urllib
 import zipfile
 from datetime import datetime
@@ -395,6 +396,8 @@ class MyClient(discord.Client):
                 return
 
             await self._run_import(g)
+        except Exception:
+            traceback.print_exc()
         finally:
             print("Bot logging out")
             await self.logout()
