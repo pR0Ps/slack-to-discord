@@ -7,7 +7,7 @@ This tool takes a Slack export file and imports it into a Discord server
 
 Capabilities
 ------------
-- Import complete message history (tested with an import of just over 10,000 messages).
+- Imports complete message history (tested with an import of just over 10,000 messages).
 - Handles private channels (if they're included in your Slack export).
 - Handles images and other files (falls back to linking to the files hosted by Slack if they're too
   big to upload).
@@ -18,6 +18,8 @@ Capabilities
 - Preserves pinned messages.
 - Day boundaries between messages are marked by a `--------YYYY-MM-DD--------` message and each
   message is prefixed by the time it was sent.
+- Messages that are too long for Discord (>2000 characters) are split up and sent as multiple
+  smaller messages.
 
 Limitations
 -----------
@@ -40,7 +42,7 @@ imported data. It's also a good idea to make sure everything worked properly bef
 users.
 
 Private channels (if you can manage to export them from Slack) will be created such that only the
-bot and guild administrators can access them. After the import complete and you invite your users,
+bot and guild administrators can access them. After the import completes and you invite your users,
 you will need to manually change the roles/permissions to give everyone access to the correct
 channels.
 

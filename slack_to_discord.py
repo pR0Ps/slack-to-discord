@@ -7,6 +7,7 @@ import json
 import os
 import re
 import tempfile
+import textwrap
 import urllib
 import zipfile
 from datetime import datetime
@@ -15,6 +16,8 @@ from urllib.parse import urlparse
 import discord
 from discord.errors import Forbidden
 
+# Max size of message to send to Discord
+MAX_MESSAGE_SIZE = 2000
 
 # Date and time formats
 DATE_FORMAT = "%Y-%m-%d"
@@ -258,6 +261,23 @@ def slack_channel_messages(d, channel_name, emoji_map, pins):
         yield msg
 
 
+def mark_end(iterable):
+    # yield (is_last, x) for x in iterable
+    it = iter(iterable)
+    try:
+        b = next(it)
+    except StopIteration:
+        return
+
+    try:
+        while True:
+            a = b
+            b = next(it)
+            yield False, a
+    except StopIteration:
+        yield True, a
+
+
 def make_discord_msgs(msg, is_reply):
 
     msg_fmt = (THREAD_FORMAT if is_reply else MSG_FORMAT)
@@ -271,17 +291,33 @@ def make_discord_msgs(msg, is_reply):
             )
         )
 
+    # Split the text into chunks to keep it under MAX_MESSAGE_SIZE
+    # Send everything except the last chunk
+    content = None
+    prefix_len = len(msg_fmt.format(**{**msg, "text": ""}))
+    for is_last, chunk in mark_end(textwrap.wrap(
+        text=msg.get("text") or "",
+        width=MAX_MESSAGE_SIZE - prefix_len,
+        drop_whitespace=False,
+        replace_whitespace=False
+    )):
+        content = msg_fmt.format(**{**msg, "text": chunk.strip()})
+        if not is_last:
+            yield {
+                "content": content
+            }
+
     # Send the original message without any files
     if len(msg["files"]) == 1:
         # if there is a single file attached, put reactions on the the file
-        if msg.get("text"):
+        if content:
             yield {
-                "content": msg_fmt.format(**msg),
+                "content": content,
             }
-    elif msg.get("text") or embed:
+    elif content or embed:
         # for no/multiple files, put reactions on the message (even if blank)
         yield {
-            "content": msg_fmt.format(**msg),
+            "content": content,
             "embed": embed,
         }
         embed = None
