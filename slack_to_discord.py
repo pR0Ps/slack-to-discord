@@ -355,6 +355,7 @@ class MyClient(discord.Client):
             g = discord.utils.get(self.guilds, name=self._guild_name)
             if g is None:
                 print("Guild {} not accessible to bot".format(self._guild_name))
+                print("Available guilds: {}".format(", ".join("'{}'".format(g.name) for g in self.guilds)))
                 return
 
             await self._run_import(g)
