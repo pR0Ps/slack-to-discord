@@ -116,19 +116,15 @@ def slack_channels(d):
 def slack_filedata(f):
     # Make sure the filename has the correct extension
     # Not fixing these issues can cause pictures to not be shown
-    ft = f["filetype"]
     name, *ext = f["name"].rsplit(".", 1)
-    if not name:
-        name = "unknown"
 
-    ext = ext[0] if ext else None
-    if not ext:
-        # Add missing extension
-        ext = ft
-    elif ext.lower() != ft.lower():
-        # Fix incorrect extension
-        name = "{}.{}".format(name, ext)
-        ext = ft
+    ext = ext[0] if ext else ""
+    ft = f.get("filetype") or ""
+    if ext.lower() == ft.lower():
+        # extension is already correct, don't fix it
+        ft = None
+
+    newname = ".".join(x for x in (name or "unknown", ext, ft) if x)
 
     # Make a list of thumbnails for this file in case the original can't be posted
     thumbs = [f[t] for t in sorted((k for k in f if re.fullmatch("thumb_(\d+)", k)), key=lambda x: int(x.split("_")[-1]), reverse=True)]
@@ -136,7 +132,7 @@ def slack_filedata(f):
         thumbs.append(f["thumb_video"])
 
     return {
-        "name": "{}.{}".format(name, ext),
+        "name": newname,
         "title": f["title"],
         "url": f["url_private"],
         "thumbs": thumbs
