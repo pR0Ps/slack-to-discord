@@ -15,7 +15,7 @@ setup(
         "Programming Language :: Python :: 3.8",
     ],
     install_requires = [
-        "discord.py>=1.5.0,<2.0.0"
+        "discord.py>=2.0.0,<3.0.0"
     ],
     py_modules=["slack_to_discord"],
     entry_points={"console_scripts": ["slack-to-discord=slack_to_discord:main"]},

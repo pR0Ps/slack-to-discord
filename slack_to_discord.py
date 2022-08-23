@@ -381,7 +381,11 @@ class MyClient(discord.Client):
         self._start, self._end = [datetime.strptime(x, DATE_FORMAT).date() if x else None for x in (start, end)]
 
         self._started = False # TODO: async equiv of a threading.event
-        super().__init__(*args, **kwargs)
+        super().__init__(
+            *args,
+            intents=discord.Intents(guilds=True, emojis_and_stickers=True),
+            **kwargs
+        )
 
     async def on_ready(self):
         if self._started:
@@ -400,7 +404,7 @@ class MyClient(discord.Client):
             traceback.print_exc()
         finally:
             print("Bot logging out")
-            await self.logout()
+            await self.close()
 
 
     async def _send_slack_msg(self, channel, msg, is_reply=False):
