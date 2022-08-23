@@ -1,21 +1,24 @@
+#1/usr/bin/env python
+
 import argparse
 import contextlib
 import glob
 import html
 import io
 import json
+import logging
 import os
 import re
 import tempfile
 import textwrap
-import traceback
 import urllib
-import zipfile
+from zipfile import ZipFile
 from datetime import datetime
 from urllib.parse import urlparse
 
 import discord
 from discord.errors import Forbidden
+
 
 # Discord size limits
 MAX_MESSAGE_SIZE = 2000
@@ -66,6 +69,9 @@ GLOBAL_EMOJI_MAP = {
     "man_kiss_man": "couplekiss_mm",
     "woman_kiss_woman": "couplekiss_ww",
 }
+
+
+__log__ = logging.getLogger(__name__)
 
 
 def emoji_replace(s, emoji_map):
@@ -367,13 +373,13 @@ def file_upload_attempts(data):
         if i < 1:
             data["content"] += ATTACHMENT_ERROR_APPEND.format(**fd)
 
-    print("Failed to upload file for message '{}'".format(data["content"]))
+    __log__.error("Failed to upload file for message '%s'", data["content"])
 
     # Just post the message without the attachment
     yield data
 
 
-class MyClient(discord.Client):
+class SlackImportClient(discord.Client):
 
     def __init__(self, *args, data_dir, guild_name, all_private, start, end, **kwargs):
         self._data_dir = data_dir
@@ -382,7 +388,8 @@ class MyClient(discord.Client):
         self._all_private = all_private
         self._start, self._end = [datetime.strptime(x, DATE_FORMAT).date() if x else None for x in (start, end)]
 
-        self._started = False # TODO: async equiv of a threading.event
+        self._exception = None
+
         super().__init__(
             *args,
             intents=discord.Intents(guilds=True, emojis_and_stickers=True),
@@ -390,24 +397,24 @@ class MyClient(discord.Client):
         )
 
     async def on_ready(self):
-        if self._started:
-            return
-
-        print("Done!")
+        __log__.info("The bot has logged in!")
         try:
             g = discord.utils.get(self.guilds, name=self._guild_name)
             if g is None:
-                print("Guild {} not accessible to bot".format(self._guild_name))
-                print("Available guilds: {}".format(", ".join("'{}'".format(g.name) for g in self.guilds)))
-                return
+                raise Exception(
+                    "Guild '{}' not accessible to the bot. Available guild(s): {}".format(
+                        self._guild_name,
+                        ", ".join("'{}'".format(g.name) for g in self.guilds)
+                    )
+                )
 
             await self._run_import(g)
-        except Exception:
-            traceback.print_exc()
+        except Exception as e:
+            __log__.critical("Failed to finish import!", exc_info=True)
+            self._exception = e
         finally:
-            print("Bot logging out")
+            __log__.info("Bot logging out")
             await self.close()
-
 
     async def _send_slack_msg(self, target, msg):
 
@@ -433,15 +440,14 @@ class MyClient(discord.Client):
                             await sent.pin()
                     break
             else:
-                print("Failed to post message: '{}'".format(data["content"]))
+                __log__.error("Failed to post message: '%s'", data["content"])
 
         return sent
 
     async def _run_import(self, g):
-        self._started = True
         emoji_map = {x.name: str(x) for x in self.emojis}
 
-        print("Importing messages...")
+        __log__.info("Starting to import messages")
         c_chan, c_msg, start_time = 0, 0, datetime.now()
 
         existing_channels = {x.name: x for x in g.text_channels}
@@ -451,8 +457,7 @@ class MyClient(discord.Client):
             init_topic = emoji_replace(init_topic, emoji_map)
             ch = None
 
-            print("Processing channel {}...".format(c))
-            print("Sending messages...")
+            __log__.info("Processing channel '#%s'...", c)
 
             for msg in slack_channel_messages(self._data_dir, c, emoji_map, pins):
                 # skip messages that are too early, stop when messages are too late
@@ -465,14 +470,14 @@ class MyClient(discord.Client):
                 if ch is None:
                     if c not in existing_channels:
                         if self._all_private or is_private:
-                            print("Creating private channel")
+                            __log__.info("Creating '%s' as a private channel", c)
                             overwrites = {
                                 g.default_role: discord.PermissionOverwrite(read_messages=False),
                                 g.me: discord.PermissionOverwrite(read_messages=True),
                             }
                             ch = await g.create_text_channel(c, topic=init_topic, overwrites=overwrites)
                         else:
-                            print("Creating public channel")
+                            __log__.info("Creating '%s' as a public channel", c)
                             ch = await g.create_text_channel(c, topic=init_topic)
                     else:
                         ch = existing_channels[c]
@@ -497,8 +502,23 @@ class MyClient(discord.Client):
                     for rmsg in msg["replies"]:
                         await self._send_slack_msg(thread, rmsg)
                         c_msg += 1
-            print("Done!")
-        print("Imported {} messages into {} channel(s) in {}".format(c_msg, c_chan, datetime.now()-start_time))
+            __log__.info("Finished importing messages into '#%s'", c)
+        __log__.info("Import finished!")
+        __log__.info("Imported %d messages into %d channel(s) in %s", c_msg, c_chan, datetime.now()-start_time)
+
+
+def run_import(*, zipfile, token, **kwargs):
+    __log__.info("Extracting Slack export zip")
+    with tempfile.TemporaryDirectory() as t:
+        with ZipFile(zipfile, 'r') as z:
+            z.extractall(t)
+
+        __log__.info("Logging the bot into Discord")
+        client = SlackImportClient(data_dir=t, **kwargs)
+        client.run(token, reconnect=False, log_handler=None)
+        if client._exception:
+            raise client._exception
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -510,24 +530,19 @@ def main():
     parser.add_argument("-s", "--start", help="The date to start importing from", required=False, default=None)
     parser.add_argument("-e", "--end", help="The date to end importing at", required=False, default=None)
     parser.add_argument("-p", "--all-private", help="Import all channels as private channels in Discord", action="store_true", default=False)
-
+    parser.add_argument("-v", "--verbose", help="Show more verbose logs", action="store_true")
     args = parser.parse_args()
 
-    print("Extracting zipfile...", end="", flush=True)
-    with tempfile.TemporaryDirectory() as t:
-        with zipfile.ZipFile(args.zipfile, 'r') as z:
-            z.extractall(t)
-        print("Done!")
+    discord.utils.setup_logging(level=logging.DEBUG if args.verbose else logging.INFO)
 
-        print("Logging the bot into Discord...", end="", flush=True)
-        client = MyClient(
-            data_dir=t,
-            guild_name=args.guild,
-            all_private=args.all_private,
-            start=args.start,
-            end=args.end
-        )
-        client.run(args.token)
+    run_import(
+        zipfile=args.zipfile,
+        token=args.token,
+        guild_name=args.guild,
+        all_private=args.all_private,
+        start=args.start,
+        end=args.end
+    )
 
 if __name__ == "__main__":
     main()
