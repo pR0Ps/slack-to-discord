@@ -128,6 +128,10 @@ def slack_channels(d):
 
 
 def slack_filedata(f):
+    # If the file doesn't exist (only contains keys for ID and mode) terminate function
+    if f["mode"] == "tombstone":
+        return
+    
     # Make sure the filename has the correct extension
     # Not fixing these issues can cause pictures to not be shown
     name, *ext = f["name"].rsplit(".", 1)
