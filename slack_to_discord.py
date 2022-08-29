@@ -337,6 +337,9 @@ def make_discord_msgs(msg):
 
     # Send one messge per image that was posted (using the picture title as the message)
     for f in msg["files"]:
+        # If the file doesn't exist then f in files will be blank, so continue
+        if f == None:
+            continue
         yield {
             "content": MSG_FORMAT.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)}),
             "file_data": f,
