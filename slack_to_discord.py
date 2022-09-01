@@ -111,20 +111,14 @@ def slack_usermap(d):
 
 
 def slack_channels(d):
-    with open(os.path.join(d, "channels.json"), 'rb') as fp:
-        data = json.load(fp)
-
     topic = lambda x: "\n\n".join([x[k]["value"] for k in ("purpose", "topic") if x[k]["value"]])
     pins = lambda x: set(p["id"] for p in x.get("pins", []))
 
-    # TODO: verify this works
-    # (this is a guess based on API docs since I couldn't get a private data export from Slack)
-    is_private = lambda x: x.get("is_private", False)
-
-    return {
-        x["name"]: (topic(x), is_private(x), pins(x))
-        for x in data
-    }
+    for is_private, file in ((False, "channels.json"), (True, "groups.json")):
+        with contextlib.suppress(FileNotFoundError):
+            with open(os.path.join(d, file), 'rb') as fp:
+                for x in json.load(fp):
+                    yield x["name"], topic(x), pins(x), is_private
 
 
 def slack_filedata(f):
@@ -455,14 +449,15 @@ class SlackImportClient(discord.Client):
 
         existing_channels = {x.name: x for x in g.text_channels}
 
-        for c, (init_topic, is_private, pins) in slack_channels(self._data_dir).items():
+        for chan_name, init_topic, pins, is_private in slack_channels(self._data_dir):
+            ch = None
+            c_msg_start = c_msg
 
             init_topic = emoji_replace(init_topic, emoji_map)
-            ch = None
 
-            __log__.info("Processing channel '#%s'...", c)
+            __log__.info("Processing channel '#%s'...", chan_name)
 
-            for msg in slack_channel_messages(self._data_dir, c, emoji_map, pins):
+            for msg in slack_channel_messages(self._data_dir, chan_name, emoji_map, pins):
                 # skip messages that are too early, stop when messages are too late
                 if self._end and msg["datetime"].date() > self._end:
                     break
@@ -471,19 +466,19 @@ class SlackImportClient(discord.Client):
 
                 # Now that we have a message to send, get/create the channel to send it to
                 if ch is None:
-                    if c not in existing_channels:
+                    if chan_name not in existing_channels:
                         if self._all_private or is_private:
-                            __log__.info("Creating '%s' as a private channel", c)
+                            __log__.info("Creating '#%s' as a private channel", chan_name)
                             overwrites = {
                                 g.default_role: discord.PermissionOverwrite(read_messages=False),
                                 g.me: discord.PermissionOverwrite(read_messages=True),
                             }
-                            ch = await g.create_text_channel(c, topic=init_topic, overwrites=overwrites)
+                            ch = await g.create_text_channel(chan_name, topic=init_topic, overwrites=overwrites)
                         else:
-                            __log__.info("Creating '%s' as a public channel", c)
-                            ch = await g.create_text_channel(c, topic=init_topic)
+                            __log__.info("Creating '#%s' as a public channel", chan_name)
+                            ch = await g.create_text_channel(chan_name, topic=init_topic)
                     else:
-                        ch = existing_channels[c]
+                        ch = existing_channels[chan_name]
                     c_chan += 1
 
                 topic = msg["events"].get("topic", None)
@@ -505,9 +500,13 @@ class SlackImportClient(discord.Client):
                     for rmsg in msg["replies"]:
                         await self._send_slack_msg(thread, rmsg)
                         c_msg += 1
-            __log__.info("Finished importing messages into '#%s'", c)
-        __log__.info("Import finished!")
-        __log__.info("Imported %d messages into %d channel(s) in %s", c_msg, c_chan, datetime.now()-start_time)
+            __log__.info("Imported %s messages into '#%s'", c_msg - c_msg_start, chan_name)
+        __log__.info(
+            "Finished importing %d messages into %d channel(s) in %s",
+            c_msg,
+            c_chan,
+            datetime.now()-start_time
+        )
 
 
 def run_import(*, zipfile, token, **kwargs):
