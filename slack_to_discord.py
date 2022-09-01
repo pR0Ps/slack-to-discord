@@ -128,10 +128,6 @@ def slack_channels(d):
 
 
 def slack_filedata(f):
-    # If the file doesn't exist (only contains keys for ID and mode) terminate function
-    if f["mode"] == "tombstone":
-        return
-    
     # Make sure the filename has the correct extension
     # Not fixing these issues can cause pictures to not be shown
     name, *ext = f["name"].rsplit(".", 1)
@@ -240,6 +236,9 @@ def slack_channel_messages(d, channel_name, emoji_map, pins):
             # Store a map of fileid to ts so file comments can be treated as replies
             for f in files:
                 file_ts_map[f["id"]] = ts
+
+            # Ignore tombstoned (removed) files
+            files = [x for x in files if x["mode"] != "tombstone"]
 
             dt = datetime.fromtimestamp(float(ts))
             msg = {
