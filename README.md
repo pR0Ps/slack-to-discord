@@ -11,6 +11,7 @@ Capabilities
 - Handles private channels (if they're included in your Slack export).
 - Handles images and other files (falls back to linking to the files hosted by Slack if they're too
   big to upload).
+- Preserves the original names and avatars of the Slack users
 - Preserves emojis and reactions to messages (custom emojis will work, but need to be manually added
   to Discord before importing).
 - Preserves threaded conversations.
@@ -22,12 +23,10 @@ Capabilities
 
 Limitations
 -----------
-- Messages will appear to all come from a bot, not actual users. This is worked around by adding the
-  original username to the message text.
 - Messages will be timestamped by Discord as the time they were imported, not as the time they were
   originally sent. This is worked around by adding a timestamp to the text of each message.
 - No private messages will be imported
-- Reactions to messages will be shown in custom embed, not as normal reactions
+- Reactions to messages will be shown in a custom embed, not as normal reactions
 - No embeds from Slack (can contain images, buttons, etc) will be preserved.
 - File uploads will be done in two messages. The first is the message content, the second is a
   message containing the title of the uploaded file and attaching it.
@@ -55,10 +54,11 @@ Instructions
 2. Create a Discord bot (see <https://discordpy.readthedocs.io/en/latest/discord.html>) with the
    following permissions:
     - Manage Channels - to create the imported channels and change the topics of them
+    - Manage Webhooks - to allow the bot to fake the usernames and avatars of Slack users
     - Send Messages
     - Create Public Threads
     - Send Messages in Threads
-    - Embed Links (to 'react' to messages - see 'Limitations' above)
+    - Embed Links - to add reactions to messages (see 'Limitations' section)
     - Attach Files
     - Manage Messages - to pin messages [optional]
 3. Install `slack-to-discord` using `pip` (`pip install git+https://github.com/pR0Ps/slack-to-discord`)
