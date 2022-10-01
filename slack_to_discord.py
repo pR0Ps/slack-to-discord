@@ -37,10 +37,6 @@ ATTACHMENT_ERROR_APPEND = "\n<file thumbnail used due to size restrictions. See 
 # Create a separator between dates? (None for no)
 DATE_SEPARATOR = "{:-^50}"
 
-# When posting a long message in multiple chunks, should the continuation
-# messages be sent in a chain of replies?
-SPLIT_MESSAGES_REPLY = False
-
 MENTION_RE = re.compile(r"<([@!#])([^>]*?)(?:\|([^>]*?))?>")
 LINK_RE = re.compile(r"<((?:https?|mailto|tel):[A-Za-z0-9_\+\.\-\/\?\,\=\#\:\@\(\)]+)\|([^>]+)>")
 EMOJI_RE = re.compile(r":([^ /<>:]+):(?::skin-tone-(\d):)?")
@@ -101,10 +97,18 @@ def emoji_replace(s, emoji_map):
     return EMOJI_RE.sub(replace, s)
 
 
-def slack_usermap(d):
+def slack_usermap(d, real_names=False):
     with open(os.path.join(d, "users.json"), 'rb') as fp:
         data = json.load(fp)
-    r = {x["id"]: x["name"] for x in data}
+
+    def get_name(userdata):
+        if real_names:
+            return userdata["profile"]["real_name_normalized"]
+
+        # bots sometimes don't set a display name - fall back to the internal username
+        return userdata["profile"]["display_name_normalized"] or userdata["name"]
+
+    r = {x["id"]: get_name(x) for x in data}
     r["USLACKBOT"] = "Slackbot"
     r["B01"] = "Slackbot"
     return r
@@ -147,9 +151,7 @@ def slack_filedata(f):
     }
 
 
-def slack_channel_messages(d, channel_name, emoji_map, pins):
-    users = slack_usermap(d)
-
+def slack_channel_messages(d, channel_name, users, emoji_map, pins):
     def mention_repl(m):
         type_ = m.group(1)
         target = m.group(2)
@@ -378,12 +380,14 @@ def file_upload_attempts(data):
 
 class SlackImportClient(discord.Client):
 
-    def __init__(self, *args, data_dir, guild_name, all_private, start, end, **kwargs):
+    def __init__(self, *args, data_dir, guild_name, all_private, real_names, start, end, **kwargs):
         self._data_dir = data_dir
         self._guild_name = guild_name
         self._prev_msg = None
         self._all_private = all_private
         self._start, self._end = [datetime.strptime(x, DATE_FORMAT).date() if x else None for x in (start, end)]
+
+        self._users = slack_usermap(data_dir, real_names=real_names)
 
         self._exception = None
 
@@ -429,7 +433,7 @@ class SlackImportClient(discord.Client):
         for data in make_discord_msgs(msg):
             for attempt in file_upload_attempts(data):
                 with contextlib.suppress(Exception):
-                    sent = await target.send(reference=sent if SPLIT_MESSAGES_REPLY else None, **attempt)
+                    sent = await target.send(**attempt)
                     if pin:
                         pin = False
                         # Requires the "manage messages" optional permission
@@ -457,7 +461,7 @@ class SlackImportClient(discord.Client):
 
             __log__.info("Processing channel '#%s'...", chan_name)
 
-            for msg in slack_channel_messages(self._data_dir, chan_name, emoji_map, pins):
+            for msg in slack_channel_messages(self._data_dir, chan_name, self._users, emoji_map, pins):
                 # skip messages that are too early, stop when messages are too late
                 if self._end and msg["datetime"].date() > self._end:
                     break
@@ -532,6 +536,7 @@ def main():
     parser.add_argument("-s", "--start", help="The date to start importing from", required=False, default=None)
     parser.add_argument("-e", "--end", help="The date to end importing at", required=False, default=None)
     parser.add_argument("-p", "--all-private", help="Import all channels as private channels in Discord", action="store_true", default=False)
+    parser.add_argument("-r", "--real-names", help="Use real names from Slack instead of usernames", action="store_true", default=False)
     parser.add_argument("-v", "--verbose", help="Show more verbose logs", action="store_true")
     args = parser.parse_args()
 
@@ -542,6 +547,7 @@ def main():
         token=args.token,
         guild_name=args.guild,
         all_private=args.all_private,
+        real_names=args.real_names,
         start=args.start,
         end=args.end
     )
