@@ -37,10 +37,6 @@ ATTACHMENT_ERROR_APPEND = "\n<file thumbnail used due to size restrictions. See 
 # Create a separator between dates? (None for no)
 DATE_SEPARATOR = "{:-^50}"
 
-# When posting a long message in multiple chunks, should the continuation
-# messages be sent in a chain of replies?
-SPLIT_MESSAGES_REPLY = False
-
 MENTION_RE = re.compile(r"<([@!#])([^>]*?)(?:\|([^>]*?))?>")
 LINK_RE = re.compile(r"<((?:https?|mailto|tel):[A-Za-z0-9_\+\.\-\/\?\,\=\#\:\@\(\)]+)\|([^>]+)>")
 EMOJI_RE = re.compile(r":([^ /<>:]+):(?::skin-tone-(\d):)?")
@@ -429,7 +425,7 @@ class SlackImportClient(discord.Client):
         for data in make_discord_msgs(msg):
             for attempt in file_upload_attempts(data):
                 with contextlib.suppress(Exception):
-                    sent = await target.send(reference=sent if SPLIT_MESSAGES_REPLY else None, **attempt)
+                    sent = await target.send(**attempt)
                     if pin:
                         pin = False
                         # Requires the "manage messages" optional permission
