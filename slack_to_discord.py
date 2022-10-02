@@ -128,7 +128,7 @@ def slack_channels(d):
 def slack_filedata(f):
     # Make sure the filename has the correct extension
     # Not fixing these issues can cause pictures to not be shown
-    name, *ext = f["name"].rsplit(".", 1)
+    name, *ext = (f.get("name") or "unnamed").rsplit(".", 1)
 
     ext = ext[0] if ext else ""
     ft = f.get("filetype") or ""
