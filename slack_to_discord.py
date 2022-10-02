@@ -29,13 +29,13 @@ DATE_FORMAT = "%Y-%m-%d"
 TIME_FORMAT = "%H:%M"
 
 # Formatting options for messages
-MSG_FORMAT = "{time} <**{username}**> {text}"
+MSG_FORMAT = "`{time}` <**{username}**> {text}"
 BACKUP_THREAD_NAME = "{date} {time}"  # used when the message to create the thread from has no text
 ATTACHMENT_TITLE_TEXT = "<*uploaded a file*> {title}"
 ATTACHMENT_ERROR_APPEND = "\n<file thumbnail used due to size restrictions. See original at <{url}>>"
 
 # Create a separator between dates? (None for no)
-DATE_SEPARATOR = "{:-^50}"
+DATE_SEPARATOR = "`{:-^30}`"
 
 MENTION_RE = re.compile(r"<([@!#])([^>]*?)(?:\|([^>]*?))?>")
 LINK_RE = re.compile(r"<((?:https?|mailto|tel):[A-Za-z0-9_\+\.\-\/\?\,\=\#\:\@\(\)]+)\|([^>]+)>")
