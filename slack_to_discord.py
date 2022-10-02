@@ -457,6 +457,8 @@ class SlackImportClient(discord.Client):
             ch = None
             c_msg_start = c_msg
 
+            self._prev_msg = None  # always start with the date in a new channel
+
             init_topic = emoji_replace(init_topic, emoji_map)
 
             __log__.info("Processing channel '#%s'...", chan_name)
@@ -504,6 +506,10 @@ class SlackImportClient(discord.Client):
                     for rmsg in msg["replies"]:
                         await self._send_slack_msg(thread, rmsg)
                         c_msg += 1
+
+                    # calculate next date separator based on the last message sent to the main channel
+                    self._prev_msg = msg
+
             __log__.info("Imported %s messages into '#%s'", c_msg - c_msg_start, chan_name)
         __log__.info(
             "Finished importing %d messages into %d channel(s) in %s",
