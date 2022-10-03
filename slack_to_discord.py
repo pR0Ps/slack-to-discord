@@ -168,9 +168,13 @@ def slack_channel_messages(d, channel_name, users, emoji_map, pins):
             return "`@{}`".format(target)
         return m.group(0)
 
+    channel_dir = os.path.join(d, channel_name)
+    if not os.path.isdir(channel_dir):
+        __log__.error("Data for channel '#%s' not found in export", channel_name)
+
     messages = {}
     file_ts_map = {}
-    for file in sorted(glob.glob(os.path.join(d, channel_name, "*.json"))):
+    for file in sorted(glob.glob(os.path.join(channel_dir, "*.json"))):
         with open(file, 'rb',) as fp:
             data = json.load(fp)
         for d in sorted(data, key=lambda x: x["ts"]):
@@ -523,7 +527,15 @@ def run_import(*, zipfile, token, **kwargs):
     __log__.info("Extracting Slack export zip")
     with tempfile.TemporaryDirectory() as t:
         with ZipFile(zipfile, 'r') as z:
-            z.extractall(t)
+            # Non-ASCII filenames in the zip seem to be encoded using UTF-8, but don't set the flag
+            # that signals this. This means Python will use cp437 to decode them, resulting in
+            # mangled filenames. Fix this by undoing the cp437 decode and using UTF-8 instead
+            for zipinfo in z.infolist():
+                if not zipinfo.flag_bits & (1 << 11):
+                    # UTF-8 flag not set, cp437 was used to decode the filename
+                    with contextlib.suppress(UnicodeEncodeError, UnicodeDecodeError):
+                        zipinfo.filename = zipinfo.filename.encode("cp437").decode("utf-8")
+                z.extract(zipinfo, path=t)
 
         __log__.info("Logging the bot into Discord")
         client = SlackImportClient(data_dir=t, **kwargs)
