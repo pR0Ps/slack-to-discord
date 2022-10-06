@@ -61,7 +61,7 @@ Instructions
     - Embed Links - to add reactions to messages (see 'Limitations' section)
     - Attach Files
     - Manage Messages - to pin messages [optional]
-3. Install `slack-to-discord` using `pip` (`pip install git+https://github.com/pR0Ps/slack-to-discord`)
+3. Install `slack-to-discord` using `pip` (`pip install slack-to-discord`)
 4. Run `slack-to-discord --zipfile <slack export zip> --guild <guild name> --token <bot token>`
    (check `slack-to-discord --help` for other options).
 5. Wait. The program will exit once the import is finished. Due to Discord rate limits, the import
