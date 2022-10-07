@@ -99,7 +99,7 @@ def emoji_replace(s, emoji_map):
 
 
 def slack_usermap(d, real_names=False):
-    with open(os.path.join(d, "users.json"), 'rb') as fp:
+    with open(os.path.join(d, "users.json"), "rb") as fp:
         data = json.load(fp)
 
     def get_userinfo(userdata):
@@ -124,7 +124,7 @@ def slack_channels(d):
 
     for is_private, file in ((False, "channels.json"), (True, "groups.json")):
         with contextlib.suppress(FileNotFoundError):
-            with open(os.path.join(d, file), 'rb') as fp:
+            with open(os.path.join(d, file), "rb") as fp:
                 for x in json.load(fp):
                     yield x["name"], topic(x), pins(x), is_private
 
@@ -149,7 +149,7 @@ def slack_filedata(f):
 
     return {
         "name": newname,
-        "title": f["title"],
+        "title": f.get("title") or newname,
         "url": f["url_private"],
         "thumbs": thumbs
     }
@@ -179,7 +179,7 @@ def slack_channel_messages(d, channel_name, users, emoji_map, pins):
     messages = {}
     file_ts_map = {}
     for file in sorted(glob.glob(os.path.join(channel_dir, "*.json"))):
-        with open(file, 'rb',) as fp:
+        with open(file, "rb") as fp:
             data = json.load(fp)
         for d in sorted(data, key=lambda x: x["ts"]):
             text = d["text"]
@@ -241,8 +241,8 @@ def slack_channel_messages(d, channel_name, users, emoji_map, pins):
             for f in files:
                 file_ts_map[f["id"]] = ts
 
-            # Ignore tombstoned (removed) files
-            files = [x for x in files if x["mode"] != "tombstone"]
+            # Ignore tombstoned (removed) files and ones that don't have a URL
+            files = [x for x in files if x["mode"] != "tombstone" and x.get("url_private")]
 
             dt = datetime.fromtimestamp(float(ts))
             msg = {
@@ -502,7 +502,7 @@ class SlackImportClient(discord.Client):
 
                     ch_webhook = await ch.create_webhook(
                         name=self.user.name,
-                        reason="For importing messages into '#{}".format(chan_name)
+                        reason="For importing messages into '#{}'".format(chan_name)
                     )
                     ch_send = functools.partial(ch_webhook.send, wait=True)
 
@@ -547,7 +547,7 @@ class SlackImportClient(discord.Client):
 def run_import(*, zipfile, token, **kwargs):
     __log__.info("Extracting Slack export zip")
     with tempfile.TemporaryDirectory() as t:
-        with ZipFile(zipfile, 'r') as z:
+        with ZipFile(zipfile, "r") as z:
             # Non-ASCII filenames in the zip seem to be encoded using UTF-8, but don't set the flag
             # that signals this. This means Python will use cp437 to decode them, resulting in
             # mangled filenames. Fix this by undoing the cp437 decode and using UTF-8 instead
