@@ -465,6 +465,11 @@ class SlackImportClient(discord.Client):
 
         existing_channels = {x.name: x for x in g.text_channels}
 
+        for webhook in await g.webhooks():
+            if webhook.user == self.user and webhook.name == "s2d-importer":
+                __log__.info("Cleaning up previous webhook %s", webhook)
+                await webhook.delete()
+
         for chan_name, init_topic, pins, is_private in slack_channels(self._data_dir):
             ch = None
             ch_webhook, ch_send = None, None
@@ -501,7 +506,7 @@ class SlackImportClient(discord.Client):
                     c_chan += 1
 
                     ch_webhook = await ch.create_webhook(
-                        name=self.user.name,
+                        name="s2d-importer",
                         reason="For importing messages into '#{}'".format(chan_name)
                     )
                     ch_send = functools.partial(ch_webhook.send, wait=True)
