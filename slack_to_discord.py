@@ -528,11 +528,14 @@ class SlackImportClient(discord.Client):
                         [BACKUP_THREAD_NAME.format(**msg).replace(":", "-")]  # ':' is not allowed in thread names
                     )[0]
                     thread = await sent.create_thread(name=thread_name)
-                    thread_send = functools.partial(ch_send, thread=thread)
-                    for rmsg in msg["replies"]:
-                        await self._handle_date_sep(thread, rmsg)
-                        await self._send_slack_msg(thread_send, rmsg)
-                        c_msg += 1
+                    try:
+                        thread_send = functools.partial(ch_send, thread=thread)
+                        for rmsg in msg["replies"]:
+                            await self._handle_date_sep(thread, rmsg)
+                            await self._send_slack_msg(thread_send, rmsg)
+                            c_msg += 1
+                    finally:
+                        await thread.edit(archived=True)
 
                     # calculate next date separator based on the last message sent to the main channel
                     self._prev_msg = msg
