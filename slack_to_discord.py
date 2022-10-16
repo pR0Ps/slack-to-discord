@@ -143,7 +143,14 @@ def slack_filedata(f):
     newname = ".".join(x for x in (name or "unknown", ext, ft) if x)
 
     # Make a list of thumbnails for this file in case the original can't be posted
-    thumbs = [f[t] for t in sorted((k for k in f if re.fullmatch("thumb_(\d+)", k)), key=lambda x: int(x.split("_")[-1]), reverse=True)]
+    thumbs = [
+        f[t]
+        for t in sorted(
+            (k for k in f if re.fullmatch("thumb_(\\d+)", k)),
+            key=lambda x: int(x.split("_")[-1]),
+            reverse=True
+        )
+    ]
     if "thumb_video" in f:
         thumbs.append(f["thumb_video"])
 
