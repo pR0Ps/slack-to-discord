@@ -1,24 +1,23 @@
-#1/usr/bin/env python
+#!/usr/bin/env python
 
-import argparse
 import contextlib
 import functools
 import glob
 import html
-import io
 import json
 import logging
 import os
 import re
 import tempfile
 import textwrap
-import urllib
 from zipfile import ZipFile
 from datetime import datetime
 from urllib.parse import urlparse
 
 import discord
 from discord.errors import Forbidden
+
+from slack_to_discord.http_stream import SeekableHTTPStream
 
 
 # Discord size limits
@@ -372,7 +371,7 @@ def file_upload_attempts(data):
 
         try:
             f = discord.File(
-                fp=io.BytesIO(urllib.request.urlopen(url).read()),
+                fp=SeekableHTTPStream(url),
                 filename=filename
             )
         except Exception:
@@ -578,33 +577,3 @@ def run_import(*, zipfile, token, **kwargs):
         client.run(token, reconnect=False, log_handler=None)
         if client._exception:
             raise client._exception
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Import Slack chat history into Discord"
-    )
-    parser.add_argument("-z", "--zipfile", help="The Slack export zip file", required=True)
-    parser.add_argument("-g", "--guild", help="The Discord Guild to import history into", required=True)
-    parser.add_argument("-t", "--token", help="The Discord bot token", required=True)
-    parser.add_argument("-s", "--start", help="The date to start importing from", required=False, default=None)
-    parser.add_argument("-e", "--end", help="The date to end importing at", required=False, default=None)
-    parser.add_argument("-p", "--all-private", help="Import all channels as private channels in Discord", action="store_true", default=False)
-    parser.add_argument("-r", "--real-names", help="Use real names from Slack instead of usernames", action="store_true", default=False)
-    parser.add_argument("-v", "--verbose", help="Show more verbose logs", action="store_true")
-    args = parser.parse_args()
-
-    discord.utils.setup_logging(level=logging.DEBUG if args.verbose else logging.INFO)
-
-    run_import(
-        zipfile=args.zipfile,
-        token=args.token,
-        guild_name=args.guild,
-        all_private=args.all_private,
-        real_names=args.real_names,
-        start=args.start,
-        end=args.end
-    )
-
-if __name__ == "__main__":
-    main()
