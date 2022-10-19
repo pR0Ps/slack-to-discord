@@ -36,10 +36,10 @@ setup(
         "discord.py>=2.0.0,<3.0.0",
         "urllib3>=1.26.12,<2.0.0",
     ],
-    py_modules=["slack_to_discord"],
+    packages=["slack_to_discord"],
     entry_points={
         "console_scripts": [
-            "slack-to-discord=slack_to_discord:main"
+            "slack-to-discord=slack_to_discord.__main__:main"
         ]
     },
 )
