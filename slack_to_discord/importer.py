@@ -394,15 +394,16 @@ def file_upload_attempts(data):
 
 class SlackImportClient(discord.Client):
 
-    def __init__(self, *args, data_dir, guild_name, all_private, real_names, start, end, **kwargs):
+    def __init__(self, *args, data_dir, guild_name, channels, start, end, all_private, real_names, **kwargs):
         self._data_dir = data_dir
         self._guild_name = guild_name
-        self._prev_msg = None
+        self._channels = channels or None
         self._all_private = all_private
         self._start, self._end = [datetime.strptime(x, DATE_FORMAT).date() if x else None for x in (start, end)]
 
         self._users = slack_usermap(data_dir, real_names=real_names)
 
+        self._prev_msg = None
         self._exception = None
 
         super().__init__(
@@ -477,6 +478,10 @@ class SlackImportClient(discord.Client):
                 await webhook.delete()
 
         for chan_name, init_topic, pins, is_private in slack_channels(self._data_dir):
+            if self._channels is not None and chan_name.lower() not in self._channels:
+                __log__.info("Skipping channel '#%s' - not in the list of channels to import", chan_name)
+                continue
+
             ch = None
             ch_webhook, ch_send = None, None
             c_msg_start = c_msg
