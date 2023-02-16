@@ -74,16 +74,16 @@ def emoji_replace(s, emoji_map):
     def replace(match):
         e, t = match.groups()
 
-        # Emojis in the emoji_map already have bounding :'s and can't have skin
-        # tones applied to them so just directly return them.
-        if e in emoji_map:
-            return emoji_map[e]
-
         # Convert -'s to "_"s except the 1st char (ex. :-1:)
         # On Slack some emojis use underscores and some use dashes
         # On Discord everything uses underscores
         if len(e) > 1 and "-" in e[1:]:
             e = e[0] + e[1:].replace("-", "_")
+
+        # Emojis in the emoji_map already have bounding :'s and can't have skin
+        # tones applied to them so just directly return them.
+        if e in emoji_map:
+            return emoji_map[e]
 
         if e in GLOBAL_EMOJI_MAP:
             e = GLOBAL_EMOJI_MAP[e]

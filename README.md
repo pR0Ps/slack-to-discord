@@ -12,8 +12,8 @@ Capabilities
 - Handles images and other files (falls back to linking to the files hosted by Slack if they're too
   big to upload).
 - Preserves the original names and avatars of the Slack users
-- Preserves emojis and reactions to messages (custom emojis will work, but need to be manually added
-  to Discord before importing).
+- Preserves emojis and reactions to messages. Custom emojis will also work, but need to be manually
+  added to Discord before importing (any `-`s in the emoji names will need to changed to `_`s)
 - Preserves threaded conversations.
 - Preserves pinned messages.
 - Day boundaries between messages are marked by a `--------YYYY-MM-DD--------` message and each
