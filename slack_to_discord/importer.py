@@ -18,6 +18,7 @@ import discord
 from discord.errors import Forbidden
 
 from slack_to_discord.http_stream import SeekableHTTPStream
+from slack_to_discord.emojis import GLOBAL_EMOJI_MAP
 
 
 # Discord size limits
@@ -41,30 +42,6 @@ MENTION_RE = re.compile(r"<([@!#])([^>]*?)(?:\|([^>]*?))?>")
 LINK_RE = re.compile(r"<((?:https?|mailto|tel):[A-Za-z0-9_\+\.\-\/\?\,\=\#\:\@\(\)]+)\|([^>]+)>")
 EMOJI_RE = re.compile(r":([^ /<>:]+):(?::skin-tone-(\d):)?")
 
-# Map Slack emojis to Discord's versions
-# Note that dashes will have been converted to underscores before this is processed
-GLOBAL_EMOJI_MAP = {
-    "thumbsup_all": "thumbsup",
-    "facepunch": "punch",
-    "the_horns": "sign_of_the_horns",
-    "simple_smile": "slightly_smiling_face",
-    "clinking_glasses": "champagne_glass",
-    "tornado": "cloud_with_tornado",
-    "car": "red_car",
-    "us": "flag_us",
-    "snow_cloud": "cloud_with_snow",
-    "snowman": "snowman2",
-    "snowman_without_snow": "snowman",
-    "crossed_fingers": "fingers_crossed",
-    "hocho": "knife",
-    "waving_black_flag": "flag_black",
-    "waving_white_flag": "flag_white",
-    "woman_heart_man": "couple_with_heart_woman_man",
-    "man_heart_man": "couple_with_heart_mm",
-    "woman_heart_woman": "couple_with_heart_ww",
-    "man_kiss_man": "couplekiss_mm",
-    "woman_kiss_woman": "couplekiss_ww",
-}
 
 
 __log__ = logging.getLogger(__name__)
