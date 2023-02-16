@@ -14,7 +14,7 @@ except Exception:
 
 setup(
     name="slack-to-discord",
-    version="1.1.1",
+    version="1.1.2",
     description="Extract data from a Slack export and import it into Discord",
     long_description=long_description,
     long_description_content_type="text/markdown",
