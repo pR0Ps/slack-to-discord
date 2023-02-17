@@ -57,8 +57,9 @@ def emoji_replace(s, emoji_map):
         if len(e) > 1 and "-" in e[1:]:
             e = e[0] + e[1:].replace("-", "_")
 
-        # Emojis in the emoji_map already have bounding :'s and can't have skin
-        # tones applied to them so just directly return them.
+        # Note that custom emojis in the emoji_map are in the format
+        # "<a:emoji_name:numeric_id>". Returning ":emoji_name:" doesn't work
+        # (it just renders the literal text).
         if e in emoji_map:
             return emoji_map[e]
 
