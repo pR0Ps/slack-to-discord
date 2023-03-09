@@ -226,7 +226,7 @@ def slack_channel_messages(d, channel_name, users, emoji_map, pins):
                 file_ts_map[f["id"]] = ts
 
             # Ignore tombstoned (removed) files and ones that don't have a URL
-            files = [x for x in files if x["mode"] != "tombstone" and x.get("url_private")]
+            files = [x for x in files if x.get("mode") != "tombstone" and x.get("url_private")]
 
             dt = datetime.fromtimestamp(float(ts))
             msg = {
