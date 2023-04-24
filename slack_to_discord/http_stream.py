@@ -101,11 +101,11 @@ class SeekableHTTPStream(io.BufferedIOBase):
         self._do_request()
 
         try:
-            self._content_length = int(self._resp.getheader("Content-Length"))
+            self._content_length = int(self._resp.headers.get("Content-Length"))
         except TypeError:
             self._content_length = None
 
-        self._seekable = self._resp.getheader("Accept-Ranges", "").lower() == "bytes"
+        self._seekable = self._resp.headers.get("Accept-Ranges", "").lower() == "bytes"
 
     def _reset(self):
         if self._resp:
