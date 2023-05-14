@@ -40,7 +40,7 @@ imported data. It's also a good idea to make sure everything worked properly bef
 users.
 
 Private channels (if you can manage to export them from Slack) will be created such that only the
-bot and guild administrators can access them. After the import completes and you invite your users,
+bot and server administrators can access them. After the import completes and you invite your users,
 you will need to manually change the roles/permissions to give everyone access to the correct
 channels.
 
@@ -62,7 +62,7 @@ Instructions
     - Attach Files
     - Manage Messages - to pin messages [optional]
 3. Install `slack-to-discord` using `pip` (`pip install slack-to-discord`)
-4. Run `slack-to-discord --zipfile <slack export zip> --guild <guild name> --token <bot token>`
+4. Run `slack-to-discord --zipfile <slack export zip> --guild <server name> --token <bot token>`
    (check `slack-to-discord --help` for other options).
 5. Wait. The program will exit once the import is finished. Due to Discord rate limits, the import
    process will take a while (speed was roughly 50 messages/min for me)
