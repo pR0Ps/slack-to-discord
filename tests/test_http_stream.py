@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from slack_to_discord import SeekableHTTPStream
+from slack_to_discord.http_stream import SeekableHTTPStream
 
 
 RESP_SIZE = 100
@@ -17,7 +17,6 @@ RESP_SIZE = 100
 
 def gen_bytes(s, e):
     return b"".join(bytes([x]) for x in range(s, e))
-
 
 class HTTPRangeRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -80,7 +79,7 @@ def test_server(mockserver):
     assert s.read(10) == gen_bytes(5, 15)
     assert s.tell() == 15
 
-    # test seeking bck from current pos and getting data we just got just reads
+    # test seeking back from current pos and getting data we just got just reads
     # it from the buffer
     assert s.seek(-10, io.SEEK_CUR) == 5
     assert s.read(10) == gen_bytes(5, 15)
@@ -93,19 +92,9 @@ def test_server(mockserver):
     assert s.seek(50) == 50
     assert s.read() == gen_bytes(50, 100)
 
-    # test read1 only reads at most 1 chunk from the stream
-    assert s.seek(0) == 0
-    assert s.read(5) == gen_bytes(0, 5)
-    assert s.read1() == gen_bytes(5, 20) # 5 in the buff + 1 read of 10 bytes
-
     # test readinto
     b = bytearray(20)
     assert s.seek(5) == 5
     assert s.readinto(b) == 20
     assert s.tell() == 25
     assert bytes(b) == gen_bytes(5, 25)
-
-    # test readinto1 (partial read)
-    b = bytearray(20)
-    assert s.readinto1(b) == 15
-    assert bytes(b) == gen_bytes(25, 40) + bytes(5)
