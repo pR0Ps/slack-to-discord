@@ -33,7 +33,7 @@ TIME_FORMAT = "%H:%M"
 MSG_FORMAT = "`{time}` {text}"
 BACKUP_THREAD_NAME = "{date} {time}"  # used when the message to create the thread from has no text
 ATTACHMENT_TITLE_TEXT = "<*uploaded a file*> {title}"
-ATTACHMENT_ERROR_APPEND = "\n<file thumbnail used due to size restrictions. See original at <{url}>>"
+ATTACHMENT_ERROR_APPEND = "\n<original file not uploaded due to size restrictions. See original at <{url}>>"
 
 # Create a separator between dates? (None for no)
 DATE_SEPARATOR = "`{:-^30}`"
@@ -110,12 +110,15 @@ def slack_filedata(f):
     # Make sure the filename has the correct extension
     # Not fixing these issues can cause pictures to not be shown
     name, *ext = (f.get("name") or "unnamed").rsplit(".", 1)
-
     ext = ext[0] if ext else ""
-    ft = f.get("filetype") or ""
-    if ext.lower() == ft.lower():
-        # extension is already correct, don't fix it
-        ft = None
+
+    # only attempt to fix filenames for things that are displayed inline
+    ft = None
+    if f.get("mimetype", "").split("/")[0].lower() in ("image", "video"):
+        ft = f.get("filetype") or ""
+        if ext.lower() == ft.lower():
+            # extension is already correct, don't fix it
+            ft = None
 
     newname = ".".join(x for x in (name or "unknown", ext, ft) if x)
 
@@ -353,7 +356,7 @@ def file_upload_attempts(data):
                 filename=filename
             )
         except Exception:
-            pass
+            __log__.debug("Failed to upload file", exc_info=True)
         else:
             yield {
                 **data,
