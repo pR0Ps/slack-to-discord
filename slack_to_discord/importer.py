@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 import discord
 from discord.errors import Forbidden
 
-from slack_to_discord.http_stream import SeekableHTTPStream
+from slack_to_discord.http_stream import CachedSeekableHTTPStream
 from slack_to_discord.emojis import GLOBAL_EMOJI_MAP
 
 
@@ -349,7 +349,7 @@ def file_upload_attempts(data):
 
         try:
             f = discord.File(
-                fp=SeekableHTTPStream(url),
+                fp=CachedSeekableHTTPStream(url),
                 filename=filename
             )
         except Exception:

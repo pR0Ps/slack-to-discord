@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import functools
 from http import HTTPStatus
 import http.server
 import io
@@ -7,7 +8,7 @@ import threading
 
 import pytest
 
-from slack_to_discord.http_stream import SeekableHTTPStream
+from slack_to_discord.http_stream import SeekableHTTPStream, CachedSeekableHTTPStream
 
 
 RESP_SIZE = 100
@@ -58,8 +59,17 @@ def mockserver():
         thread.join()
 
 
-def test_server(mockserver):
-    s = SeekableHTTPStream(mockserver, chunk_size=10)
+@pytest.mark.parametrize("stream_cls", [
+    SeekableHTTPStream,
+    CachedSeekableHTTPStream,
+    functools.partial(CachedSeekableHTTPStream, max_buffer_size=50, force_cache=True)
+])
+def test_http_stream(mockserver, stream_cls):
+    s = stream_cls(mockserver, chunk_size=10)
+
+    assert s.readable()
+    assert s.seekable()
+    assert not s.writable()
 
     assert len(s) == RESP_SIZE
 
@@ -98,3 +108,29 @@ def test_server(mockserver):
     assert s.readinto(b) == 20
     assert s.tell() == 25
     assert bytes(b) == gen_bytes(5, 25)
+
+
+def test_cached_http_stream_read_rolls(mockserver):
+    s = CachedSeekableHTTPStream(mockserver, chunk_size=10, max_buffer_size=50, force_cache=True)
+    assert s._cache
+
+    assert s.read(50) == gen_bytes(0, 50)
+    assert not s._cache._rolled
+
+    assert s.read(1) == gen_bytes(50, 51)
+    assert s._cache._rolled
+
+    assert s.seek(0) == 0
+    assert s.read() == gen_bytes(0, 100)
+
+def test_cached_http_stream_seek_rolls(mockserver):
+    s = CachedSeekableHTTPStream(mockserver, chunk_size=10, max_buffer_size=50, force_cache=True)
+    assert s._cache
+
+    assert not s._cache._rolled
+    assert s.seek(0, io.SEEK_END) == RESP_SIZE
+    assert s._cache._rolled
+    assert s.read(1) == b""
+
+    assert s.seek(0) == 0
+    assert s.read() == gen_bytes(0, 100)
