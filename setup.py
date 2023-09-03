@@ -34,6 +34,7 @@ setup(
     install_requires = [
         "discord.py>=2.0.0,<3.0.0",
         "urllib3>=1.26.12,<2.0.0",
+        "iterable-io>=1.0.0,<2.0.0",
     ],
     packages=["slack_to_discord"],
     entry_points={

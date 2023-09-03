@@ -3,6 +3,7 @@
 import io
 from tempfile import SpooledTemporaryFile
 
+from iterableio import open_iterable
 import urllib3
 
 
@@ -14,55 +15,6 @@ DEFAULT_BUFFER_SIZE = 10 * 1024 * 1024  # 10M
 
 (only used if the remote server doesn't support range requests)
 """
-
-
-class IteratorReader(io.RawIOBase):
-    """Provides an io.RawIOBase-compatible interface for an iterator"""
-
-    def __init__(self, iterator):
-        self._iter = iter(iterator)
-        self._extra = bytearray()
-        self._total = 0
-
-    def readable(self):
-        return True
-
-    def tell(self):
-        """Return the total number of bytes that have been read so far"""
-        if self.closed:
-            raise ValueError("I/O operation on a closed {}".format(self.__class__.__name__))
-        return self._total - len(self._extra)
-
-    def readinto(self, b):
-        """Read bytes into a pre-allocated bytes-like object b
-
-        Returns the number of bytes read, 0 indicates EOF
-        """
-        num = len(b)
-        if self._iter is not None:
-            while len(self._extra) < num:
-                try:
-                    new = next(self._iter)
-                except StopIteration:
-                    self._iter = None
-                    break
-                else:
-                    self._total += len(new)
-                    self._extra += new
-
-        ret, self._extra = self._extra[:num], self._extra[num:]
-
-        lret = len(ret)
-        b[:lret] = ret
-        return lret
-
-
-class BufferedIteratorReader(io.BufferedReader):
-    """Provides a io.BufferedReader interface over an IteratorReader"""
-
-    def __init__(self, iterator, buffer_size=io.DEFAULT_BUFFER_SIZE):
-        """Create a new buffered iterator reader using the given iterator"""
-        super().__init__(raw=IteratorReader(iterator), buffer_size=buffer_size)
 
 
 class SeekableHTTPStream(io.BufferedIOBase):
@@ -122,9 +74,10 @@ class SeekableHTTPStream(io.BufferedIOBase):
             )
         else:
             self._resp = resp
-            self._buff = BufferedIteratorReader(
+            self._buff = open_iterable(
                 resp.stream(amt=self._chunk_size, decode_content=True),
-                buffer_size=self._chunk_size
+                mode="rb",
+                buffering=self._chunk_size
             )
 
     def __len__(self):
