@@ -1,0 +1,43 @@
+name: tests
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - master
+  # Run it every month to make sure it still works
+  schedule:
+   - cron:  '0 0 1 * *'
+
+jobs:
+  build:
+    name: tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+        python-version:
+          - "3.8"
+          - "3.9"
+          - "3.10"
+          - "3.11"
+      fail-fast: false
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Set up Python v${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install package and test dependencies
+      run: |
+        pip install . pytest pytest-cov
+
+    - name: Run tests
+      run: |
+        py.test tests/ --cov=slack_to_discord
