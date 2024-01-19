@@ -212,6 +212,8 @@ def slack_channel_messages(d, channel_name, users, emoji_map, pins):
                 text = "<*left the channel*>"
             elif subtype == "channel_archive":
                 text = "<*archived the channel*>"
+            elif subtype == "channel_unarchive":
+                text = "<*unarchived the channel*>"
 
             # Handle setting channel topic/purpose
             elif subtype == "channel_topic" or subtype == "channel_purpose":
