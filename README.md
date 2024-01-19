@@ -28,6 +28,7 @@ Limitations
 - No private messages will be imported
 - Reactions to messages will be shown in a custom embed, not as normal reactions
 - No embeds from Slack (can contain images, buttons, etc) will be preserved.
+- No canvases from Slack will be preserved.
 - File uploads will be done in two messages. The first is the message content, the second is a
   message containing the title of the uploaded file and attaching it.
 

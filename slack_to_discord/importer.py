@@ -165,7 +165,7 @@ def slack_channel_messages(d, channel_name, users, emoji_map, pins):
 
     messages = {}
     file_ts_map = {}
-    for file in sorted(glob.glob(os.path.join(channel_dir, "*.json"))):
+    for file in sorted(glob.glob(os.path.join(channel_dir, "*-*-*.json"))):
         with open(file, "rb") as fp:
             data = json.load(fp)
         for d in sorted(data, key=lambda x: x["ts"]):
