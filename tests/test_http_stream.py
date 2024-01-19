@@ -19,6 +19,7 @@ RESP_SIZE = 100
 def gen_bytes(s, e):
     return b"".join(bytes([x]) for x in range(s, e))
 
+
 class HTTPRangeRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         range_ = self.headers.get("Range")
@@ -37,12 +38,12 @@ class HTTPRangeRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return
             else:
                 self.send_response(HTTPStatus.PARTIAL_CONTENT)
-                self.send_header("Content-Range", f"bytes {start}-{end-1}/{end}")
+                self.send_header("Content-Range", f"bytes {start}-{end-1}/{RESP_SIZE}")
         else:
             self.send_response(HTTPStatus.OK)
 
         self.send_header("Accept-Ranges", "bytes")
-        self.send_header("Content-Length", RESP_SIZE)
+        self.send_header("Content-Length", end - start)
         self.end_headers()
         self.wfile.write(gen_bytes(start, end))
 
