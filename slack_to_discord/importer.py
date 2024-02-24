@@ -142,7 +142,7 @@ def slack_filedata(f):
     }
 
 
-def slack_channel_messages(d, channel_name, users, emoji_map, pins):
+def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
     def mention_repl(m):
         type_ = m.group(1)
         target = m.group(2)
@@ -159,7 +159,18 @@ def slack_channel_messages(d, channel_name, users, emoji_map, pins):
             return "`@{}`".format(target)
         return m.group(0)
 
-    channel_dir = os.path.join(d, channel_name)
+    def getkey(f, d, k):
+        try:
+            return d[k]
+        except KeyError:
+            relpath = os.path.relpath(f, start=datadir)
+            __log__.critical(
+                "The following message from file '%s' does not contain key '%s':\n%r",
+                relpath, k, d
+            )
+            raise
+
+    channel_dir = os.path.join(datadir, channel_name)
     if not os.path.isdir(channel_dir):
         __log__.error("Data for channel '#%s' not found in export", channel_name)
 
@@ -168,8 +179,8 @@ def slack_channel_messages(d, channel_name, users, emoji_map, pins):
     for file in sorted(glob.glob(os.path.join(channel_dir, "*-*-*.json"))):
         with open(file, "rb") as fp:
             data = json.load(fp)
-        for d in sorted(data, key=lambda x: x["ts"]):
-            text = d["text"]
+        for d in sorted(data, key=lambda x: getkey(file, x, "ts")):
+            text = getkey(file, d, "text")
             text = MENTION_RE.sub(mention_repl, text)
             text = LINK_RE.sub(lambda x: x.group(1), text)
             text = emoji_replace(text, emoji_map)
@@ -257,6 +268,7 @@ def slack_channel_messages(d, channel_name, users, emoji_map, pins):
             if thread_ts != ts:
                 if thread_ts not in messages:
                     # Orphan thread message - skip it
+                    __log__.debug("Orphan threaded message - skipping it:\n%r", msg)
                     continue
                 messages[thread_ts]["replies"][ts] = msg
             else:
