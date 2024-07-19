@@ -65,6 +65,7 @@ Instructions
 3. Install `slack-to-discord` using `pip` (`pip install slack-to-discord`)
 4. Run `slack-to-discord --zipfile <slack export zip> --guild <server name> --token <bot token>`
    (check `slack-to-discord --help` for other options).
+> if your procedure always shutdown accidently after running for a few hours, maybe you need retry, you can put your key to [run_with_retry.sh](https://github.com/wa008/slack-to-discord/blob/master/run_with_retry.sh) and run it
 5. Wait. The program will exit once the import is finished. Due to Discord rate limits, the import
    process will take a while (speed was roughly 50 messages/min for me)
 6. Inspect the imported history.
