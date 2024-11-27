@@ -423,6 +423,9 @@ class SlackImportClient(discord.Client):
         except Exception as e:
             __log__.critical("Failed to finish import!", exc_info=True)
             self._exception = e
+        except BaseException:
+            __log__.debug("Stopped import due to a BaseException", exc_info=True)
+            raise
         finally:
             __log__.info("Bot logging out")
             await self.close()
