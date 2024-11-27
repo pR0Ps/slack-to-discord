@@ -474,7 +474,11 @@ class SlackImportClient(discord.Client):
             if webhook.user == self.user and webhook.name == "s2d-importer":
                 __log__.info("Cleaning up previous webhook %s", webhook)
                 await webhook.delete()
-
+        
+        cache = './local_cache.txt'
+        with open(cache, 'r') as load_f:
+            channel_date_dict = json.load(load_f)
+        
         for chan_name, init_topic, pins, is_private in slack_channels(self._data_dir):
             if self._channels is not None and chan_name.lower() not in self._channels:
                 __log__.info("Skipping channel '#%s' - not in the list of channels to import", chan_name)
@@ -495,6 +499,9 @@ class SlackImportClient(discord.Client):
                 if self._end and msg["datetime"].date() > self._end:
                     break
                 elif self._start and  msg["datetime"].date() < self._start:
+                    continue
+                # start from the date point in cache
+                if chan_name in channel_date_dict and msg["datetime"].strftime(DATE_FORMAT) < channel_date_dict[chan_name]:
                     continue
 
                 # Now that we have a message to send, get/create the channel to send it to
@@ -536,6 +543,7 @@ class SlackImportClient(discord.Client):
                         textwrap.wrap(msg.get("text") or "", max_lines=1, width=MAX_THREADNAME_SIZE, placeholder="…") or
                         [BACKUP_THREAD_NAME.format(**msg).replace(":", "-")]  # ':' is not allowed in thread names
                     )[0]
+                    
                     thread = await sent.create_thread(name=thread_name)
                     try:
                         thread_send = functools.partial(ch_send, thread=thread)
@@ -548,6 +556,12 @@ class SlackImportClient(discord.Client):
 
                     # calculate next date separator based on the last message sent to the main channel
                     self._prev_msg = msg
+                # update cache                
+                if chan_name not in channel_date_dict or msg["datetime"].strftime(DATE_FORMAT) > channel_date_dict[chan_name]:
+                    channel_date_dict[chan_name] = msg["datetime"].strftime(DATE_FORMAT)
+                    with open(cache, "w") as f:
+                        __log__.info("update channel_date_dict, time: %s, dict: %s", datetime.now(), json.dumps(channel_date_dict))
+                        json.dump(channel_date_dict, f, ensure_ascii=False)
 
             if ch_webhook:
                 await ch_webhook.delete()
