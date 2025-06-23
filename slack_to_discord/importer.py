@@ -99,12 +99,11 @@ def slack_usermap(d, real_names=False):
 
 
 def get_channel_name_by_id(data_dir, id):
-    for is_private, file in ((False, "channels.json"), (True, "groups.json")):
-        with contextlib.suppress(FileNotFoundError):
-            with open(os.path.join(data_dir, file), "rb") as fp:
-                for x in json.load(fp):
-                    if x["id"] == id:
-                        return x["name"]
+    with contextlib.suppress(FileNotFoundError):
+        with open(os.path.join(data_dir, "channels.json"), "rb") as fp:
+            for x in json.load(fp):
+                if x["id"] == id:
+                    return x["name"]
     return None
 
 
