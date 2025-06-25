@@ -33,7 +33,6 @@ ATTACHMENT_ERROR_APPEND = "\n<original file not uploaded due to size restriction
 
 # Create a separator between dates? (None for no)
 DATE_SEPARATOR = "`{:-^30}`"
-DATE_FORMAT_FOR_SEPARATOR = " %B %-d, %Y "
 
 MENTION_RE = re.compile(r"<([@!#])([^>]*?)(?:\|([^>]*?))?>")
 LINK_RE = re.compile(r"<((?:https?|mailto|tel):[A-Za-z0-9_\+\.\-\/\?\,\=\#\:\@\(\)]+)\|([^>]+)>")
@@ -204,7 +203,7 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins, date_f
 
             text = MENTION_RE.sub(mention_repl, text)
             # (when replacing links, include original link text, if any)
-            text = LINK_RE.sub(lambda x: f"[{x.group(2)}]({x.group(1)})" if x.group(2) else x.group(1), text)
+            text = LINK_RE.sub(lambda x: f"[{x.group(2)}]({x.group(1)})" if x.group(2) and x.group(2) != x.group(1) else x.group(1), text)
             text = emoji_replace(text, emoji_map)
             text = html.unescape(text)
             text = text.rstrip()
