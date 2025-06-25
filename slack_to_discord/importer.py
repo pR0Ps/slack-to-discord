@@ -27,13 +27,13 @@ MAX_THREADNAME_SIZE = 100
 
 # Formatting options for messages
 MSG_FORMAT = "`{time}` {text}"
-INLINE_DATE_MSG_FORMAT = "`{date}, {time}` {text}"
 BACKUP_THREAD_NAME = "{date} {time}"  # used when the message to create the thread from has no text
 ATTACHMENT_TITLE_TEXT = "<*uploaded a file*> {title}"
 ATTACHMENT_ERROR_APPEND = "\n<original file not uploaded due to size restrictions. See original at <{url}>>"
 
 # Create a separator between dates? (None for no)
 DATE_SEPARATOR = "`{:-^30}`"
+DATE_FORMAT_FOR_SEPARATOR = " %B %-d, %Y "
 
 MENTION_RE = re.compile(r"<([@!#])([^>]*?)(?:\|([^>]*?))?>")
 LINK_RE = re.compile(r"<((?:https?|mailto|tel):[A-Za-z0-9_\+\.\-\/\?\,\=\#\:\@\(\)]+)\|([^>]+)>")
@@ -43,6 +43,7 @@ ITALICS_STARRED_RE = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)") # matches *italics*
 BULLET_RE = re.compile(r"[\u2022\u25AA\u25E6]") # matches the bullet points that could appear in bulleted lists in a Slack export (• ◦ and ▪︎)
 INITIAL_SPACE_RE = re.compile(r"(?<=\n)((  )+)\1") # captures half of initial spaces in a line in a capture group (to turn, e.g. groups of 4 spaces into groups of 2)
 EMPTY_QUOTE_LINE_RE = re.compile(r">\n") # matches empty lines in quote blocks
+UNICODE_VARIATION_SELECTOR_RE = re.compile(r"[\uFE00-\uFE0F]") # these control codes sometimes appear with bullets or other characters and mess up formatting in Discord
 
 
 __log__ = logging.getLogger(__name__)
@@ -198,6 +199,8 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins, date_f
             # Note that some messages have no "text" field
             # (e.g. messages with only an image/attachment)
             text = d["text"] if "text" in d else ""
+            
+            __log__.info("Raw text: %s", text)
 
             text = MENTION_RE.sub(mention_repl, text)
             # (when replacing links, include original link text, if any)
@@ -209,10 +212,13 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins, date_f
             # Replace Slack *bold* text with proper Markdown **bold** text, as used in Discord
             text = ITALICS_STARRED_RE.sub(lambda x: f"**{x.group(1)}**", text)
             # Replace Slack-style bulleted lists (tab=4) with Discord-style bulleted lists (tab=2)
-            text = BULLET_RE.sub("*", text)
+            text = BULLET_RE.sub("-", text)
             text = INITIAL_SPACE_RE.sub(lambda x: x.group(1), text)
+            text = UNICODE_VARIATION_SELECTOR_RE.sub("", text) # also, remove variation-selector control chars because they can mess up list formatting
             # Discord renders empty lines within quote blocks weirdly, so add a space to them
             text = EMPTY_QUOTE_LINE_RE.sub('> \n', text)
+            
+            __log__.info("Formatted text: %s", text)
             
             ts = d["ts"]
 
@@ -324,9 +330,7 @@ def mark_end(iterable):
         yield True, a
 
 
-def make_discord_msgs(msg, inline_dates):
-    msg_format = INLINE_DATE_MSG_FORMAT if inline_dates else MSG_FORMAT
-
+def make_discord_msgs(msg):
     # Show reactions listed in an embed
     embed = None
     if msg["reactions"]:
@@ -339,14 +343,14 @@ def make_discord_msgs(msg, inline_dates):
     # Split the text into chunks to keep it under MAX_MESSAGE_SIZE
     # Send everything except the last chunk
     content = None
-    prefix_len = len(msg_format.format(**{**msg, "text": ""}))
+    prefix_len = len(MSG_FORMAT.format(**{**msg, "text": ""}))
     for is_last, chunk in mark_end(textwrap.wrap(
         text=msg.get("text") or "",
         width=MAX_MESSAGE_SIZE - prefix_len,
         drop_whitespace=False,
         replace_whitespace=False
     )):
-        content = msg_format.format(**{**msg, "text": chunk.strip()})
+        content = MSG_FORMAT.format(**{**msg, "text": chunk.strip()})
         if not is_last:
             yield {
                 "content": content
@@ -370,7 +374,7 @@ def make_discord_msgs(msg, inline_dates):
     # Send one messge per image that was posted (using the picture title as the message)
     for f in msg["files"]:
         yield {
-            "content": msg_format.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)}),
+            "content": MSG_FORMAT.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)}),
             "file_data": f,
             "embed": embed
         }
@@ -436,12 +440,11 @@ def file_upload_attempts(data, channel_dir):
 
 class SlackImportClient(discord.Client):
 
-    def __init__(self, *args, data_dir, guild_name, channels, start, end, all_private, real_names, inline_dates, date_format, time_format, **kwargs):
+    def __init__(self, *args, data_dir, guild_name, channels, start, end, all_private, real_names, date_format, time_format, **kwargs):
         self._data_dir = data_dir
         self._guild_name = guild_name
         self._channels = channels or None
         self._all_private = all_private
-        self._inline_dates = inline_dates
         self._date_format, self._time_format = date_format, time_format
         self._start, self._end = [datetime.strptime(x, date_format).date() if x else None for x in (start, end)]
 
@@ -480,7 +483,7 @@ class SlackImportClient(discord.Client):
             await self.close()
 
     async def _handle_date_sep(self, target, msg):
-        if DATE_SEPARATOR:
+        if DATE_SEPARATOR and msg["date"]:
             msg_date = msg["date"]
             if (
                 not self._prev_msg or
@@ -492,7 +495,7 @@ class SlackImportClient(discord.Client):
     async def _send_slack_msg(self, send, msg, channel_dir):
         sent = None
         pin = msg["events"].pop("pin", False)
-        for data in make_discord_msgs(msg, self._inline_dates):
+        for data in make_discord_msgs(msg):
             for attempt in file_upload_attempts(data, channel_dir):
                 with contextlib.suppress(Exception):
                     sent = await send(
@@ -578,8 +581,7 @@ class SlackImportClient(discord.Client):
                     await ch.edit(topic=topic)
 
                 # Send message and threaded replies
-                if not self._inline_dates:
-                    await self._handle_date_sep(ch, msg)
+                await self._handle_date_sep(ch, msg)
                 sent = await self._send_slack_msg(ch_send, msg, channel_dir)
                 c_msg += 1
                 if sent and msg["replies"]:
@@ -591,8 +593,7 @@ class SlackImportClient(discord.Client):
                     try:
                         thread_send = functools.partial(ch_send, thread=thread)
                         for rmsg in msg["replies"]:
-                            if not self._inline_dates:
-                                await self._handle_date_sep(thread, rmsg)
+                            await self._handle_date_sep(thread, rmsg)
                             await self._send_slack_msg(thread_send, rmsg, channel_dir)
                             c_msg += 1
                     finally:
