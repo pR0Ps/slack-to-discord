@@ -207,7 +207,7 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
 
             text = MENTION_RE.sub(mention_repl, text)
             # (when replacing links, include original link text, if any)
-            text = LINK_RE.sub(lambda x: f"[{x.group(2)}]({x.group(1)})" if x.group(2) else x.group(1), text)
+            text = LINK_RE.sub(lambda x: f"[{x.group(2)}]({x.group(1)})" if x.group(2) and x.group(2) != x.group(1) else x.group(1), text)
             text = emoji_replace(text, emoji_map)
             text = html.unescape(text)
             text = text.rstrip()
