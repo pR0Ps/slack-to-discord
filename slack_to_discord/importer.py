@@ -445,7 +445,7 @@ class SlackImportClient(discord.Client):
         self._channels = channels or None
         self._all_private = all_private
         self._date_format, self._time_format = date_format, time_format
-        self._start, self._end = [datetime.strptime(x, date_format).date() if x else None for x in (start, end)]
+        self._start, self._end = [datetime.strptime(x, "%Y-%m-%d").date() if x else None for x in (start, end)]
 
         self._users = slack_usermap(data_dir, real_names=real_names)
 
