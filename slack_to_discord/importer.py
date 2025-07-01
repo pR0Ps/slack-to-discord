@@ -206,8 +206,6 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
             # (e.g. messages with only an image/attachment)
             text = d["text"] if "text" in d else ""
 
-            __log__.info("Raw text: %s", text)
-
             text = MENTION_RE.sub(mention_repl, text)
             # (when replacing links, include original link text, if any)
             text = LINK_RE.sub(lambda x: f"[{x.group(2)}]({x.group(1)})" if x.group(2) and x.group(2) != x.group(1) else x.group(1), text)
@@ -223,8 +221,6 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
             text = UNICODE_VARIATION_SELECTOR_RE.sub("", text) # also, remove variation-selector control chars because they can mess up list formatting
             # Discord renders empty lines within quote blocks weirdly, so add a space to them
             text = EMPTY_QUOTE_LINE_RE.sub('> \n', text)
-
-            __log__.info("Formatted text: %s", text)
 
             ts = d["ts"]
 
