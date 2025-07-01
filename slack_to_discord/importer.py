@@ -204,13 +204,13 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins, date_f
 
             text = MENTION_RE.sub(mention_repl, text)
             # (when replacing links, include original link text, if any)
-            text = LINK_RE.sub(lambda x: f"[{x.group(2)}]({x.group(1)})" if x.group(2) and x.group(2) != x.group(1) else x.group(1), text)
+            text = LINK_RE.sub(lambda x: "[{}]({})".format(x.group(2), x.group(1)) if x.group(2) and x.group(2) != x.group(1) else x.group(1), text)
             text = emoji_replace(text, emoji_map)
             text = html.unescape(text)
             text = text.rstrip()
 
             # Replace Slack *bold* text with proper Markdown **bold** text, as used in Discord
-            text = ITALICS_STARRED_RE.sub(lambda x: f"**{x.group(1)}**", text)
+            text = ITALICS_STARRED_RE.sub(lambda x: "**{}**".format(x.group(1)), text)
             # Replace Slack-style bulleted lists (tab=4) with Discord-style bulleted lists (tab=2)
             text = BULLET_RE.sub("-", text)
             text = INITIAL_SPACE_RE.sub(lambda x: x.group(1), text)
@@ -391,7 +391,7 @@ def file_upload_attempts(data, channel_dir):
     attachments_dir = os.path.join(channel_dir, 'attachments')
     attachment_path = os.path.join(
         attachments_dir,
-        f"{fd["url"].split("/")[-2].split("-")[-1]}-{fd["name"]}"
+        "{}-{}".format(fd["url"].split("/")[-2].split("-")[-1], fd["name"])
     )
     if os.path.exists(attachment_path):
         try:
