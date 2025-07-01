@@ -25,10 +25,6 @@ from slack_to_discord.emojis import GLOBAL_EMOJI_MAP
 MAX_MESSAGE_SIZE = 2000
 MAX_THREADNAME_SIZE = 100
 
-# Date and time formats
-DATE_FORMAT = "%Y-%m-%d"
-TIME_FORMAT = "%H:%M"
-
 # Formatting options for messages
 MSG_FORMAT = "`{time}` {text}"
 BACKUP_THREAD_NAME = "{date} {time}"  # used when the message to create the thread from has no text
@@ -142,7 +138,7 @@ def slack_filedata(f):
     }
 
 
-def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
+def slack_channel_messages(datadir, channel_name, users, emoji_map, pins, date_format, time_format):
     def mention_repl(m):
         type_ = m.group(1)
         target = m.group(2)
@@ -248,8 +244,8 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
             msg = {
                 "userinfo": users.get(user_id, ("[unknown]", None)),
                 "datetime": dt,
-                "time": dt.strftime(TIME_FORMAT),
-                "date": dt.strftime(DATE_FORMAT),
+                "time": dt.strftime(time_format),
+                "date": dt.strftime(date_format),
                 "text": text,
                 "replies": {},
                 "reactions": {
@@ -389,12 +385,14 @@ def file_upload_attempts(data):
 
 class SlackImportClient(discord.Client):
 
-    def __init__(self, *args, data_dir, guild_name, channels, start, end, all_private, real_names, **kwargs):
+    def __init__(self, *args, data_dir, guild_name, channels, start, end, all_private, real_names, date_format, time_format, **kwargs):
         self._data_dir = data_dir
         self._guild_name = guild_name
         self._channels = channels or None
         self._all_private = all_private
-        self._start, self._end = [datetime.strptime(x, DATE_FORMAT).date() if x else None for x in (start, end)]
+        self._date_format = date_format
+        self._time_format = time_format
+        self._start, self._end = [datetime.strptime(x, "%Y-%m-%d").date() if x else None for x in (start, end)]
 
         self._users = slack_usermap(data_dir, real_names=real_names)
 
@@ -431,14 +429,13 @@ class SlackImportClient(discord.Client):
             await self.close()
 
     async def _handle_date_sep(self, target, msg):
-        if DATE_SEPARATOR:
-            msg_date = msg["date"]
+        if DATE_SEPARATOR and msg["date"]:
             if (
-                not self._prev_msg or
-                self._prev_msg["date"] != msg_date
+                not self._prev_msg
+                or self._prev_msg["datetime"].date() != msg["datetime"].date()
             ):
-                await target.send(content=DATE_SEPARATOR.format(msg_date))
-            self._prev_msg = msg
+                await target.send(content=DATE_SEPARATOR.format(msg["date"]))
+        self._prev_msg = msg
 
     async def _send_slack_msg(self, send, msg):
         sent = None
@@ -490,7 +487,7 @@ class SlackImportClient(discord.Client):
 
             __log__.info("Processing channel '#%s'...", chan_name)
 
-            for msg in slack_channel_messages(self._data_dir, chan_name, self._users, emoji_map, pins):
+            for msg in slack_channel_messages(self._data_dir, chan_name, self._users, emoji_map, pins, self._date_format, self._time_format):
                 # skip messages that are too early, stop when messages are too late
                 if self._end and msg["datetime"].date() > self._end:
                     break
