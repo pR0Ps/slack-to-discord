@@ -82,14 +82,17 @@ def slack_usermap(d, real_names=False):
 
     def get_userinfo(userdata):
         profile = userdata["profile"]
+        # some user profiles don't have image_original - fall back to image_512
+        avatar_url = profile.get("image_original") or profile.get("image_512")
+
         if real_names:
             name = profile["real_name_normalized"]
         else:
             # bots and some user profiles sometimes don't set a display name
             # fall back to real_name_normalized if set, otherwise internal username
             name = profile["display_name_normalized"] or profile["real_name_normalized"] or userdata["name"]
-        # some user profiles don't have image_original - fall back to image_512
-        return (name, profile.get("image_original") or profile.get("image_512"))
+
+        return (name, avatar_url)
 
 
     r = {x["id"]: get_userinfo(x) for x in data}
