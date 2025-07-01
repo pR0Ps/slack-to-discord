@@ -26,7 +26,6 @@ MAX_MESSAGE_SIZE = 2000
 MAX_THREADNAME_SIZE = 100
 
 # Formatting options for messages
-MSG_FORMAT = "`{time}` {text}"
 BACKUP_THREAD_NAME = "{date} {time}"  # used when the message to create the thread from has no text
 ATTACHMENT_TITLE_TEXT = "<*uploaded a file*> {title}"
 ATTACHMENT_ERROR_APPEND = "\n<original file not uploaded due to size restrictions. See original at <{url}>>"
@@ -293,6 +292,18 @@ def mark_end(iterable):
         yield True, a
 
 
+def format_msg(msg, text=None):
+    """Format a message
+
+    If text is provided, it will override the text in the msg data
+    """
+    text = text if text is not None else msg["text"]
+    if msg["time"]:
+        return "`{}` {}".format(msg["time"], text)
+    else:
+        return text
+
+
 def make_discord_msgs(msg):
 
     # Show reactions listed in an embed
@@ -307,14 +318,14 @@ def make_discord_msgs(msg):
     # Split the text into chunks to keep it under MAX_MESSAGE_SIZE
     # Send everything except the last chunk
     content = None
-    prefix_len = len(MSG_FORMAT.format(**{**msg, "text": ""}))
+    prefix_len = len(format_msg(msg, text=""))
     for is_last, chunk in mark_end(textwrap.wrap(
         text=msg.get("text") or "",
         width=MAX_MESSAGE_SIZE - prefix_len,
         drop_whitespace=False,
         replace_whitespace=False
     )):
-        content = MSG_FORMAT.format(**{**msg, "text": chunk.strip()})
+        content = format_msg(msg, text=chunk.strip())
         if not is_last:
             yield {
                 "content": content
@@ -338,7 +349,7 @@ def make_discord_msgs(msg):
     # Send one messge per image that was posted (using the picture title as the message)
     for f in msg["files"]:
         yield {
-            "content": MSG_FORMAT.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)}),
+            "content": format_msg(msg, text=ATTACHMENT_TITLE_TEXT.format(**f)),
             "file_data": f,
             "embed": embed
         }
