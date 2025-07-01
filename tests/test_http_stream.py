@@ -7,6 +7,7 @@ import io
 import threading
 
 import pytest
+from urllib3.exceptions import HTTPError
 
 from slack_to_discord.http_stream import SeekableHTTPStream, CachedSeekableHTTPStream
 
@@ -22,6 +23,11 @@ def gen_bytes(s, e):
 
 class HTTPRangeRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
+        if self.path == "/fail":
+            self.send_response(HTTPStatus.NOT_FOUND)
+            self.end_headers()
+            return
+
         range_ = self.headers.get("Range")
         start, end = 0, RESP_SIZE
         if range_ is not None:
@@ -135,3 +141,13 @@ def test_cached_http_stream_seek_rolls(mockserver):
 
     assert s.seek(0) == 0
     assert s.read() == gen_bytes(0, 100)
+
+
+@pytest.mark.parametrize("stream_cls", [
+    SeekableHTTPStream,
+    CachedSeekableHTTPStream,
+    functools.partial(CachedSeekableHTTPStream, max_buffer_size=50, force_cache=True)
+])
+def test_http_stream(mockserver, stream_cls):
+    with pytest.raises(HTTPError):
+        s = stream_cls(f"{mockserver}/fail", chunk_size=10)

@@ -166,10 +166,9 @@ class CachedSeekableHTTPStream(SeekableHTTPStream):
     """
 
     def __init__(self, *args, max_buffer_size=DEFAULT_BUFFER_SIZE, force_cache=False, **kwargs):
+        self._cache = None
         super().__init__(*args, **kwargs)
-        if not force_cache and super().seekable():
-            self._cache = None
-        else:
+        if force_cache or not super().seekable():
             self._cache = SpooledTemporaryFile(max_size=max_buffer_size)
             self._cache_size = 0
 
