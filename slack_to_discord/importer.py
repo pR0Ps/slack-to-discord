@@ -25,12 +25,7 @@ from slack_to_discord.emojis import GLOBAL_EMOJI_MAP
 MAX_MESSAGE_SIZE = 2000
 MAX_THREADNAME_SIZE = 100
 
-# Date and time formats
-DATE_FORMAT = "%Y-%m-%d"
-TIME_FORMAT = "%H:%M"
-
 # Formatting options for messages
-MSG_FORMAT = "`{time}` {text}"
 BACKUP_THREAD_NAME = "{date} {time}"  # used when the message to create the thread from has no text
 ATTACHMENT_TITLE_TEXT = "<*uploaded a file*> {title}"
 ATTACHMENT_ERROR_APPEND = "\n<original file not uploaded due to size restrictions. See original at <{url}>>"
@@ -142,7 +137,7 @@ def slack_filedata(f):
     }
 
 
-def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
+def slack_channel_messages(datadir, channel_name, users, emoji_map, pins, date_format, time_format):
     def mention_repl(m):
         type_ = m.group(1)
         target = m.group(2)
@@ -248,8 +243,8 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
             msg = {
                 "userinfo": users.get(user_id, ("[unknown]", None)),
                 "datetime": dt,
-                "time": dt.strftime(TIME_FORMAT),
-                "date": dt.strftime(DATE_FORMAT),
+                "time": dt.strftime(time_format),
+                "date": dt.strftime(date_format),
                 "text": text,
                 "replies": {},
                 "reactions": {
@@ -297,6 +292,18 @@ def mark_end(iterable):
         yield True, a
 
 
+def format_msg(msg, text=None):
+    """Format a message
+
+    If text is provided, it will override the text in the msg data
+    """
+    text = text if text is not None else msg["text"]
+    if msg["time"]:
+        return "`{}` {}".format(msg["time"], text)
+    else:
+        return text
+
+
 def make_discord_msgs(msg):
 
     # Show reactions listed in an embed
@@ -311,14 +318,14 @@ def make_discord_msgs(msg):
     # Split the text into chunks to keep it under MAX_MESSAGE_SIZE
     # Send everything except the last chunk
     content = None
-    prefix_len = len(MSG_FORMAT.format(**{**msg, "text": ""}))
+    prefix_len = len(format_msg(msg, text=""))
     for is_last, chunk in mark_end(textwrap.wrap(
         text=msg.get("text") or "",
         width=MAX_MESSAGE_SIZE - prefix_len,
         drop_whitespace=False,
         replace_whitespace=False
     )):
-        content = MSG_FORMAT.format(**{**msg, "text": chunk.strip()})
+        content = format_msg(msg, text=chunk.strip())
         if not is_last:
             yield {
                 "content": content
@@ -342,7 +349,7 @@ def make_discord_msgs(msg):
     # Send one messge per image that was posted (using the picture title as the message)
     for f in msg["files"]:
         yield {
-            "content": MSG_FORMAT.format(**{**msg, "text": ATTACHMENT_TITLE_TEXT.format(**f)}),
+            "content": format_msg(msg, text=ATTACHMENT_TITLE_TEXT.format(**f)),
             "file_data": f,
             "embed": embed
         }
@@ -389,12 +396,14 @@ def file_upload_attempts(data):
 
 class SlackImportClient(discord.Client):
 
-    def __init__(self, *args, data_dir, guild_name, channels, start, end, all_private, real_names, **kwargs):
+    def __init__(self, *args, data_dir, guild_name, channels, start, end, all_private, real_names, date_format, time_format, **kwargs):
         self._data_dir = data_dir
         self._guild_name = guild_name
         self._channels = channels or None
         self._all_private = all_private
-        self._start, self._end = [datetime.strptime(x, DATE_FORMAT).date() if x else None for x in (start, end)]
+        self._date_format = date_format
+        self._time_format = time_format
+        self._start, self._end = [datetime.strptime(x, "%Y-%m-%d").date() if x else None for x in (start, end)]
 
         self._users = slack_usermap(data_dir, real_names=real_names)
 
@@ -431,14 +440,13 @@ class SlackImportClient(discord.Client):
             await self.close()
 
     async def _handle_date_sep(self, target, msg):
-        if DATE_SEPARATOR:
-            msg_date = msg["date"]
+        if DATE_SEPARATOR and msg["date"]:
             if (
-                not self._prev_msg or
-                self._prev_msg["date"] != msg_date
+                not self._prev_msg
+                or self._prev_msg["datetime"].date() != msg["datetime"].date()
             ):
-                await target.send(content=DATE_SEPARATOR.format(msg_date))
-            self._prev_msg = msg
+                await target.send(content=DATE_SEPARATOR.format(msg["date"]))
+        self._prev_msg = msg
 
     async def _send_slack_msg(self, send, msg):
         sent = None
@@ -490,7 +498,7 @@ class SlackImportClient(discord.Client):
 
             __log__.info("Processing channel '#%s'...", chan_name)
 
-            for msg in slack_channel_messages(self._data_dir, chan_name, self._users, emoji_map, pins):
+            for msg in slack_channel_messages(self._data_dir, chan_name, self._users, emoji_map, pins, self._date_format, self._time_format):
                 # skip messages that are too early, stop when messages are too late
                 if self._end and msg["datetime"].date() > self._end:
                     break
@@ -532,10 +540,12 @@ class SlackImportClient(discord.Client):
                 sent = await self._send_slack_msg(ch_send, msg)
                 c_msg += 1
                 if sent and msg["replies"]:
+                    # name the thread based on the message text, falling back to the constant, falling back to a datestamp
                     thread_name = (
-                        textwrap.wrap(msg.get("text") or "", max_lines=1, width=MAX_THREADNAME_SIZE, placeholder="…") or
-                        [BACKUP_THREAD_NAME.format(**msg).replace(":", "-")]  # ':' is not allowed in thread names
-                    )[0]
+                        next(iter(textwrap.wrap(msg.get("text") or "", max_lines=1, width=MAX_THREADNAME_SIZE, placeholder="…")), None)
+                        or BACKUP_THREAD_NAME.format(**msg).strip()
+                        or msg["datetime"].strftime("%Y-%m-%d %H-%M")
+                    ).replace(":", "-")  # ':' is not allowed in thread names
                     thread = await sent.create_thread(name=thread_name)
                     try:
                         thread_send = functools.partial(ch_send, thread=thread)

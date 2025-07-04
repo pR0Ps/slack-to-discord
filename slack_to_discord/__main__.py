@@ -19,6 +19,8 @@ def main():
     parser.add_argument("-e", "--end", help="The date to end importing at (YYYY-MM-DD)", required=False, default=None)
     parser.add_argument("-p", "--all-private", help="Import all channels as private channels in Discord", action="store_true", default=False)
     parser.add_argument("-r", "--real-names", help="Use real names from Slack instead of usernames", action="store_true", default=False)
+    parser.add_argument("-df", "--date-format", help="Date format to use for message separators, empty to disable them (default: %(default)s)", required=False, default="%Y-%m-%d")
+    parser.add_argument("-tf", "--time-format", help="Time format to use for message prefixes, empty to disable them (default: %(default)s)", required=False, default="%H:%M")
     parser.add_argument("-v", "--verbose", help="Show more verbose logs", action="store_true")
     args = parser.parse_args()
 
@@ -33,6 +35,8 @@ def main():
         real_names=args.real_names,
         start=args.start,
         end=args.end,
+        date_format=args.date_format,
+        time_format=args.time_format,
     )
 
 if __name__ == "__main__":
