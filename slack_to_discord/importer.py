@@ -25,10 +25,6 @@ from slack_to_discord.emojis import GLOBAL_EMOJI_MAP
 MAX_MESSAGE_SIZE = 2000
 MAX_THREADNAME_SIZE = 100
 
-# Date and time formats
-DATE_FORMAT = "%Y-%m-%d"
-TIME_FORMAT = "%H:%M"
-
 # Formatting options for messages
 MSG_FORMAT = "`{time}` {text}"
 BACKUP_THREAD_NAME = "{date} {time}"  # used when the message to create the thread from has no text
@@ -42,6 +38,11 @@ MENTION_RE = re.compile(r"<([@!#])([^>]*?)(?:\|([^>]*?))?>")
 LINK_RE = re.compile(r"<((?:https?|mailto|tel):[A-Za-z0-9_\+\.\-\/\?\,\=\#\:\@\(\)]+)\|([^>]+)>")
 EMOJI_RE = re.compile(r":([^ /<>:]+):(?::skin-tone-(\d):)?")
 
+ITALICS_STARRED_RE = re.compile(r"(?<!\*)\*([^*]+)\*(?!\*)") # matches *italics* but not _italics_ or **bold**
+BULLET_RE = re.compile(r"[\u2022\u25AA\u25E6]") # matches the bullet points that could appear in bulleted lists in a Slack export (• ◦ and ▪︎)
+INITIAL_SPACE_RE = re.compile(r"(?<=\n)((  )+)\1") # captures half of initial spaces in a line in a capture group (to turn, e.g. groups of 4 spaces into groups of 2)
+EMPTY_QUOTE_LINE_RE = re.compile(r">\n") # matches empty lines in quote blocks
+UNICODE_VARIATION_SELECTOR_RE = re.compile(r"[\uFE00-\uFE0F]") # these control codes sometimes appear with bullets or other characters and mess up formatting in Discord
 
 
 __log__ = logging.getLogger(__name__)
@@ -81,18 +82,32 @@ def slack_usermap(d, real_names=False):
 
     def get_userinfo(userdata):
         profile = userdata["profile"]
+        # some user profiles don't have image_original - fall back to image_512
+        avatar_url = profile.get("image_original") or profile.get("image_512")
+
         if real_names:
             name = profile["real_name_normalized"]
         else:
-            # bots sometimes don't set a display name - fall back to the internal username
-            name = profile["display_name_normalized"] or userdata["name"]
-        return (name, profile.get("image_original"))
+            # bots and some user profiles sometimes don't set a display name
+            # fall back to real_name_normalized if set, otherwise internal username
+            name = profile["display_name_normalized"] or profile["real_name_normalized"] or userdata["name"]
+
+        return (name, avatar_url)
 
 
     r = {x["id"]: get_userinfo(x) for x in data}
     r["USLACKBOT"] = ("Slackbot", None)
     r["B01"] = ("Slackbot", None)
     return r
+
+
+def get_channel_name_by_id(data_dir, id):
+    with contextlib.suppress(FileNotFoundError):
+        with open(os.path.join(data_dir, "channels.json"), "rb") as fp:
+            for x in json.load(fp):
+                if x["id"] == id:
+                    return x["name"]
+    return None
 
 
 def slack_channels(d):
@@ -142,13 +157,16 @@ def slack_filedata(f):
     }
 
 
-def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
+def slack_channel_messages(datadir, channel_name, users, emoji_map, pins, date_format, time_format):
     def mention_repl(m):
         type_ = m.group(1)
         target = m.group(2)
         channel_name = m.group(3)
 
         if type_ == "#":
+            # sometimes channels mentions only have the target (channel ID) field
+            # but not the channel name field - so we must determine channel name
+            channel_name = channel_name or get_channel_name_by_id(datadir, target) or target
             return "`#{}`".format(channel_name)
         elif channel_name is not None:
             return m.group(0)
@@ -180,13 +198,26 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
         with open(file, "rb") as fp:
             data = json.load(fp)
         for d in sorted(data, key=lambda x: getkey(file, x, "ts")):
-            text = getkey(file, d, "text")
+            # Note that some messages have no "text" field
+            # (e.g. messages with only an image/attachment)
+            text = d["text"] if "text" in d else ""
+
             text = MENTION_RE.sub(mention_repl, text)
-            text = LINK_RE.sub(lambda x: x.group(1), text)
+            # (when replacing links, include original link text, if any)
+            text = LINK_RE.sub(lambda x: "[{}]({})".format(x.group(2), x.group(1)) if x.group(2) and x.group(2) != x.group(1) else x.group(1), text)
             text = emoji_replace(text, emoji_map)
             text = html.unescape(text)
             text = text.rstrip()
 
+            # Replace Slack *bold* text with proper Markdown **bold** text, as used in Discord
+            text = ITALICS_STARRED_RE.sub(lambda x: "**{}**".format(x.group(1)), text)
+            # Replace Slack-style bulleted lists (tab=4) with Discord-style bulleted lists (tab=2)
+            text = BULLET_RE.sub("-", text)
+            text = INITIAL_SPACE_RE.sub(lambda x: x.group(1), text)
+            text = UNICODE_VARIATION_SELECTOR_RE.sub("", text) # also, remove variation-selector control chars because they can mess up list formatting
+            # Discord renders empty lines within quote blocks weirdly, so add a space to them
+            text = EMPTY_QUOTE_LINE_RE.sub('> \n', text)
+            
             ts = d["ts"]
 
             user_id = d.get("user")
@@ -248,8 +279,8 @@ def slack_channel_messages(datadir, channel_name, users, emoji_map, pins):
             msg = {
                 "userinfo": users.get(user_id, ("[unknown]", None)),
                 "datetime": dt,
-                "time": dt.strftime(TIME_FORMAT),
-                "date": dt.strftime(DATE_FORMAT),
+                "time": dt.strftime(time_format),
+                "date": dt.strftime(date_format),
                 "text": text,
                 "replies": {},
                 "reactions": {
@@ -298,7 +329,6 @@ def mark_end(iterable):
 
 
 def make_discord_msgs(msg):
-
     # Show reactions listed in an embed
     embed = None
     if msg["reactions"]:
@@ -349,13 +379,32 @@ def make_discord_msgs(msg):
         embed = None
 
 
-def file_upload_attempts(data):
+def file_upload_attempts(data, channel_dir):
     # Files that are too big cause issues
     # yield data to try to send (original, then thumbnails)
     fd = data.pop("file_data", None)
     if not fd:
         yield data
         return
+
+    # First check the local "attachments" folder (e.g. if we're dealing with a slackdump export)
+    attachments_dir = os.path.join(channel_dir, 'attachments')
+    attachment_path = os.path.join(
+        attachments_dir,
+        "{}-{}".format(fd["url"].split("/")[-2].split("-")[-1], fd["name"])
+    )
+    if os.path.exists(attachment_path):
+        try:
+            __log__.info("Uploading %s", attachment_path)
+            f = discord.File(fp=attachment_path, filename=fd["name"])
+        except Exception:
+            __log__.debug("Failed to upload file", exc_info=True)
+        else:
+            yield {
+                **data,
+                "file": f
+            }
+            return
 
     for i, url in enumerate([fd["url"]] + fd.get("thumbs", [])):
         if i > 0:
@@ -389,12 +438,13 @@ def file_upload_attempts(data):
 
 class SlackImportClient(discord.Client):
 
-    def __init__(self, *args, data_dir, guild_name, channels, start, end, all_private, real_names, **kwargs):
+    def __init__(self, *args, data_dir, guild_name, channels, start, end, all_private, real_names, date_format, time_format, **kwargs):
         self._data_dir = data_dir
         self._guild_name = guild_name
         self._channels = channels or None
         self._all_private = all_private
-        self._start, self._end = [datetime.strptime(x, DATE_FORMAT).date() if x else None for x in (start, end)]
+        self._date_format, self._time_format = date_format, time_format
+        self._start, self._end = [datetime.strptime(x, "%Y-%m-%d").date() if x else None for x in (start, end)]
 
         self._users = slack_usermap(data_dir, real_names=real_names)
 
@@ -431,7 +481,7 @@ class SlackImportClient(discord.Client):
             await self.close()
 
     async def _handle_date_sep(self, target, msg):
-        if DATE_SEPARATOR:
+        if DATE_SEPARATOR and msg["date"]:
             msg_date = msg["date"]
             if (
                 not self._prev_msg or
@@ -440,11 +490,11 @@ class SlackImportClient(discord.Client):
                 await target.send(content=DATE_SEPARATOR.format(msg_date))
             self._prev_msg = msg
 
-    async def _send_slack_msg(self, send, msg):
+    async def _send_slack_msg(self, send, msg, channel_dir):
         sent = None
         pin = msg["events"].pop("pin", False)
         for data in make_discord_msgs(msg):
-            for attempt in file_upload_attempts(data):
+            for attempt in file_upload_attempts(data, channel_dir):
                 with contextlib.suppress(Exception):
                     sent = await send(
                         username=msg["userinfo"][0],
@@ -483,6 +533,7 @@ class SlackImportClient(discord.Client):
             ch = None
             ch_webhook, ch_send = None, None
             c_msg_start = c_msg
+            channel_dir = os.path.join(self._data_dir, chan_name)
 
             self._prev_msg = None  # always start with the date in a new channel
 
@@ -490,7 +541,7 @@ class SlackImportClient(discord.Client):
 
             __log__.info("Processing channel '#%s'...", chan_name)
 
-            for msg in slack_channel_messages(self._data_dir, chan_name, self._users, emoji_map, pins):
+            for msg in slack_channel_messages(self._data_dir, chan_name, self._users, emoji_map, pins, self._date_format, self._time_format):
                 # skip messages that are too early, stop when messages are too late
                 if self._end and msg["datetime"].date() > self._end:
                     break
@@ -529,7 +580,7 @@ class SlackImportClient(discord.Client):
 
                 # Send message and threaded replies
                 await self._handle_date_sep(ch, msg)
-                sent = await self._send_slack_msg(ch_send, msg)
+                sent = await self._send_slack_msg(ch_send, msg, channel_dir)
                 c_msg += 1
                 if sent and msg["replies"]:
                     thread_name = (
@@ -541,7 +592,7 @@ class SlackImportClient(discord.Client):
                         thread_send = functools.partial(ch_send, thread=thread)
                         for rmsg in msg["replies"]:
                             await self._handle_date_sep(thread, rmsg)
-                            await self._send_slack_msg(thread_send, rmsg)
+                            await self._send_slack_msg(thread_send, rmsg, channel_dir)
                             c_msg += 1
                     finally:
                         await thread.edit(archived=True)
