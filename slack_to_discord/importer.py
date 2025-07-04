@@ -540,10 +540,12 @@ class SlackImportClient(discord.Client):
                 sent = await self._send_slack_msg(ch_send, msg)
                 c_msg += 1
                 if sent and msg["replies"]:
+                    # name the thread based on the message text, falling back to the constant, falling back to a datestamp
                     thread_name = (
-                        textwrap.wrap(msg.get("text") or "", max_lines=1, width=MAX_THREADNAME_SIZE, placeholder="…") or
-                        [BACKUP_THREAD_NAME.format(**msg).replace(":", "-")]  # ':' is not allowed in thread names
-                    )[0]
+                        next(iter(textwrap.wrap(msg.get("text") or "", max_lines=1, width=MAX_THREADNAME_SIZE, placeholder="…")), None)
+                        or BACKUP_THREAD_NAME.format(**msg).strip()
+                        or msg["datetime"].strftime("%Y-%m-%d %H-%M")
+                    ).replace(":", "-")  # ':' is not allowed in thread names
                     thread = await sent.create_thread(name=thread_name)
                     try:
                         thread_send = functools.partial(ch_send, thread=thread)
