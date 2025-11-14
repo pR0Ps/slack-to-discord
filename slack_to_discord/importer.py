@@ -127,7 +127,7 @@ def slack_channelmap(d):
     return r
 
 
-def slack_filedata(f):
+def slack_filedata(f, attachment_dir):
     # Make sure the filename has the correct extension
     # Not fixing these issues can cause pictures to not be shown
     name, *ext = (f.get("name") or "unnamed").rsplit(".", 1)
@@ -155,10 +155,21 @@ def slack_filedata(f):
     if "thumb_video" in f:
         thumbs.append(f["thumb_video"])
 
+    # Look for the filename in the provided attachments directory
+    # The 'slackdump' tool stores attachments in this folder with the format "<id>-<name>"
+    # To be safe, we look for "<id>-*"
+    filepath = None
+    if attachment_dir:
+        filepath = next(
+            glob.iglob(os.path.join(attachment_dir, "{}-*".format(f["id"]))),
+            None
+        )
+
     return {
         "name": newname,
         "title": f.get("title") or newname,
         "url": f["url_private"],
+        "filepath": filepath,
         "thumbs": thumbs
     }
 
@@ -201,7 +212,11 @@ def slack_channel_messages(datadir, channel_name, channels, users, emoji_map, pi
 
     channel_dir = os.path.join(datadir, channel_name)
     if not os.path.isdir(channel_dir):
-        __log__.error("Data for channel '#%s' not found in export", channel_name)
+        __log__.warning("Data for channel '#%s' not found in export", channel_name)
+
+    attachment_dir = os.path.join(channel_dir, "attachments")
+    if not os.path.isdir(attachment_dir):
+        attachment_dir = None
 
     messages = {}
     file_ts_map = {}
@@ -297,7 +312,7 @@ def slack_channel_messages(datadir, channel_name, channels, users, emoji_map, pi
                     ]
                     for x in d.get("reactions", [])
                 },
-                "files": [slack_filedata(f) for f in files],
+                "files": [slack_filedata(f, attachment_dir) for f in files],
                 "events": events
             }
 
@@ -407,18 +422,11 @@ def file_upload_attempts(data):
         yield data
         return
 
-    for i, url in enumerate([fd["url"]] + fd.get("thumbs", [])):
-        if i > 0:
-            # Trying thumbnails - get the filename from Slack (it has the correct extension)
-            filename = urlparse(url).path.rsplit("/", 1)[-1]
-        else:
-            filename = fd["name"]
-
+    # if we have the file locally, use it instead of the remote files
+    if fd["filepath"]:
         try:
-            f = discord.File(
-                fp=CachedSeekableHTTPStream(url),
-                filename=filename
-            )
+            __log__.info("Uploading %s", fd["filepath"])
+            f = discord.File(fp=fd["filepath"], filename=fd["name"])
         except Exception:
             __log__.debug("Failed to upload file", exc_info=True)
         else:
@@ -426,10 +434,31 @@ def file_upload_attempts(data):
                 **data,
                 "file": f
             }
+    else:
+        # try full size and all thumbnails until one works
+        for i, url in enumerate([fd["url"]] + fd.get("thumbs", [])):
+            if i > 0:
+                # Trying thumbnails - get the filename from Slack (it has the correct extension)
+                filename = urlparse(url).path.rsplit("/", 1)[-1]
+            else:
+                filename = fd["name"]
 
-        # The original URL failed - trying thumbnails
-        if i < 1:
-            data["content"] += ATTACHMENT_ERROR_APPEND.format(**fd)
+            try:
+                f = discord.File(
+                    fp=CachedSeekableHTTPStream(url),
+                    filename=filename
+                )
+            except Exception:
+                __log__.debug("Failed to upload file", exc_info=True)
+            else:
+                yield {
+                    **data,
+                    "file": f
+                }
+
+            # The original URL failed - trying thumbnails
+            if i < 1:
+                data["content"] += ATTACHMENT_ERROR_APPEND.format(**fd)
 
     __log__.error("Failed to upload file for message '%s'", data["content"])
 
