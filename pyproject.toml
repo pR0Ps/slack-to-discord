@@ -3,6 +3,7 @@ name = "slack-to-discord"
 version = "1.1.7"
 description = "Extract data from a Slack export and import it into Discord"
 urls.Repository = "https://github.com/pR0Ps/slack-to-discord"
+urls.Changelog = "https://github.com/pR0Ps/slack-to-discord/blob/master/CHANGELOG.md"
 readme = "README.md"
 license = "GPL-3.0-only"
 classifiers = [
