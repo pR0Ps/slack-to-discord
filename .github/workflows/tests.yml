@@ -11,7 +11,29 @@ on:
 
 jobs:
   build:
+    name: Build wheel using latest stable Python 3
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.x'
+
+    - name: Build wheel
+      run: pip install build && python -m build . --wheel
+
+    - name: Upload wheel artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheel
+        path: dist/*.whl
+
+  test:
     name: tests
+    needs: build
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -25,20 +47,32 @@ jobs:
           - "3.10"
           - "3.11"
           - "3.12"
+          - "3.13"
+          - "3.14"
+          - "3.15-dev"
       fail-fast: false
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Set up Python v${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install package and test dependencies
-      run: |
-        pip install . pytest pytest-cov
+    # install from the built wheel
+    - name: Download wheel artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: wheel
+        path: dist
 
-    - name: Run tests
+    - name: Install from wheel
+      shell: bash
       run: |
-        py.test tests/ --cov=slack_to_discord
+        pip install dist/*.whl
+
+    - name: Install pytest and run tests
+      run: |
+        pip install pytest pytest-cov
+        py.test --cov=slack_to_discord
