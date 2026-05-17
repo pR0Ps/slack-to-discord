@@ -51,7 +51,13 @@ contribute your fixes back to the project!), or open an issue on the project.
 
 Instructions
 ------------
-1. Export your data from Slack via <https://my.slack.com/services/export>
+1. Export your data using one of the supported methods:
+    - Directly from Slack via <https://my.slack.com/services/export>.
+      This is the official method, but requires admin access and attachments are only included as
+      URLs that reference files on Slack's servers.
+    - Using the [slackdump](https://github.com/rusq/slackdump) project.
+      This is an unofficial project, but no admin access is required to use it, and it includes the
+      actual attachment data in the export.
 2. Create a Discord bot (see <https://discordpy.readthedocs.io/en/latest/discord.html>) with the
    following permissions:
     - Manage Channels - to create the imported channels and change the topics of them
