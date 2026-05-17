@@ -44,7 +44,7 @@ __log__ = logging.getLogger(__name__)
 
 # Helper functions to convert Slack's "mrkdwn" to Discord's markdown version
 md_fix_strikethrough = functools.partial(  # '~strikethrough~' --> '~~strikethrough~~'
-    re.compile(r"\b~([^~]+)~\b").sub,
+    re.compile(r"(?<![~\w])~([^~]+)~(?![~\w])").sub,
     r"~~\1~~"
 )
 md_fix_bold = functools.partial(  # '*bold*' --> '**bold**', '**bold**' --> '\***bold**\*'
