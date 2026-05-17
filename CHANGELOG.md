@@ -1,6 +1,22 @@
 slack-to-discord changelog
 ==========================
 
+### v1.2.0
+ - Modernize the build system
+ - Add official support for the [slackdump](https://github.com/rusq/slackdump) project
+ - Prefer retrieving attachments from the export file instead of downloading them
+ - Improve export file loading (support content being in a subdirectory, better error messages)
+ - Improve error message for non-uploadable files
+ - Fix various markdown formatting differences (strikethrough, bold, blockquotes, bullets)
+ - Preserve original text of titled links
+ - Improve rendering of subteam mentions
+ - Fix handling of #channel links with no included channel name (just the id)
+ - Fix error when parsing messages without any text (ie. file uploads)
+ - Add fallback for user profile images and display names
+ - Add CLI options to control the format of message dates/times
+ - Prevent failed cached streams from raising exceptions when being closed
+ - Add more debug logging (again)
+
 ### v1.1.7
  - Add more debug logging
 
