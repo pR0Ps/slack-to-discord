@@ -20,6 +20,8 @@ Capabilities
   message is prefixed by the time it was sent.
 - Messages that are too long for Discord (>2000 characters) are split up and sent as multiple
   smaller messages.
+- Tracks the import state per-channel so failed imports can easily be retried. This also enables
+  importing only new messages from an updated export file.
 
 Limitations
 -----------
@@ -45,9 +47,11 @@ bot and server administrators can access them. After the import completes and yo
 you will need to manually change the roles/permissions to give everyone access to the correct
 channels.
 
-If something goes wrong with the import, you can delete all the created channels to quickly remove
-the history. At this point, you can either fix the issue yourself and re-run the export (please
-contribute your fixes back to the project!), or open an issue on the project.
+If something goes wrong with the import, you can either use the state file (see the `-sf`/
+`--state-file` option) to retry the import from where it failed, or you can delete all the created
+channels to quickly remove the history and retry from the beginnng. If the failure persists, you
+can either fix the issue yourself and retry the import (please contribute your fixes back to the
+project!), or open an issue on the project.
 
 Instructions
 ------------
