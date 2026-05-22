@@ -492,8 +492,8 @@ class SlackImportClient(discord.Client):
     async def on_ready(self):
         __log__.info("The bot has logged in!")
         try:
-            g = discord.utils.get(self.guilds, name=self._guild_name)
-            if g is None:
+            guild = discord.utils.get(self.guilds, name=self._guild_name)
+            if guild is None:
                 raise Exception(
                     "Guild '{}' not accessible to the bot. Available guild(s): {}".format(
                         self._guild_name,
@@ -501,7 +501,7 @@ class SlackImportClient(discord.Client):
                     )
                 )
 
-            await self._run_import(g)
+            await self._run_import(guild)
         except Exception as e:
             __log__.critical("Failed to finish import!", exc_info=True)
             self._exception = e
@@ -543,15 +543,15 @@ class SlackImportClient(discord.Client):
 
         return sent
 
-    async def _run_import(self, g):
+    async def _run_import(self, guild):
         emoji_map = {x.name: str(x) for x in self.emojis}
 
         __log__.info("Starting to import messages")
         c_chan, c_msg, start_time = 0, 0, datetime.now()
 
-        existing_channels = {x.name: x for x in g.text_channels}
+        existing_channels = {x.name: x for x in guild.text_channels}
 
-        for webhook in await g.webhooks():
+        for webhook in await guild.webhooks():
             if webhook.user == self.user and webhook.name == "s2d-importer":
                 __log__.info("Cleaning up previous webhook %s", webhook)
                 await webhook.delete()
@@ -584,13 +584,13 @@ class SlackImportClient(discord.Client):
                         if self._all_private or is_private:
                             __log__.info("Creating '#%s' as a private channel", chan_name)
                             overwrites = {
-                                g.default_role: discord.PermissionOverwrite(read_messages=False),
-                                g.me: discord.PermissionOverwrite(read_messages=True),
+                                guild.default_role: discord.PermissionOverwrite(read_messages=False),
+                                guild.me: discord.PermissionOverwrite(read_messages=True),
                             }
-                            ch = await g.create_text_channel(chan_name, topic=init_topic, overwrites=overwrites)
+                            ch = await guild.create_text_channel(chan_name, topic=init_topic, overwrites=overwrites)
                         else:
                             __log__.info("Creating '#%s' as a public channel", chan_name)
-                            ch = await g.create_text_channel(chan_name, topic=init_topic)
+                            ch = await guild.create_text_channel(chan_name, topic=init_topic)
                     else:
                         ch = existing_channels[chan_name]
                     c_chan += 1
