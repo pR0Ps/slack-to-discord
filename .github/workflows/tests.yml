@@ -75,4 +75,4 @@ jobs:
     - name: Install pytest and run tests
       run: |
         pip install pytest pytest-cov
-        py.test --cov=slack_to_discord
+        pytest tests/ --cov=slack_to_discord
