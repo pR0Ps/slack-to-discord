@@ -14,6 +14,7 @@ def main():
     parser.add_argument("-z", "--zipfile", help="The Slack export zip file", required=True)
     parser.add_argument("-t", "--token", help="The Discord bot token", required=True)
     parser.add_argument("-g", "--guild", help="The Discord Guild (ie. server name) to import history into", required=True)
+    parser.add_argument("-sf", "--state-file", help="Path to read/write the import state. This enables resuming failed or updated imports", default=None)
     parser.add_argument("-c", "--channels", help="When specified, will only import the provided channels. Do not include the '#'s (ex: 'general', not '#general')", nargs="*")
     parser.add_argument("-s", "--start", help="The date to start importing from (YYYY-MM-DD)", required=False, default=None)
     parser.add_argument("-e", "--end", help="The date to end importing at (YYYY-MM-DD)", required=False, default=None)
@@ -30,6 +31,7 @@ def main():
         zipfile=args.zipfile,
         token=args.token,
         guild_name=args.guild,
+        state_file=args.state_file,
         channels=args.channels,
         all_private=args.all_private,
         real_names=args.real_names,

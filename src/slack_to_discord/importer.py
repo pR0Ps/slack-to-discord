@@ -468,7 +468,7 @@ def file_upload_attempts(data):
 
 class SlackImportClient(discord.Client):
 
-    def __init__(self, *args, data_dir, guild_name, channels, start, end, all_private, real_names, date_format, time_format, **kwargs):
+    def __init__(self, *args, data_dir, guild_name, resume_state, channels, start, end, all_private, real_names, date_format, time_format, **kwargs):
         self._data_dir = data_dir
         self._guild_name = guild_name
         self._channels = channels or None
@@ -482,6 +482,9 @@ class SlackImportClient(discord.Client):
 
         self._prev_msg = None
         self._exception = None
+
+        # {channel: latest imported message datetime}
+        self._resume_state = resume_state
 
         super().__init__(
             *args,
@@ -570,12 +573,20 @@ class SlackImportClient(discord.Client):
             init_topic = emoji_replace(init_topic, emoji_map)
 
             __log__.info("Processing channel '#%s'...", chan_name)
+            last_imported = self._resume_state.get(chan_name, None)
+            if last_imported is not None:
+                __log__.info("Resuming a previous import - skipping messages up to %s", last_imported)
 
             for msg in slack_channel_messages(self._data_dir, chan_name, self._channel_data, self._user_data, emoji_map, pins, self._date_format, self._time_format):
                 # skip messages that are too early, stop when messages are too late
-                if self._end and msg["datetime"].date() > self._end:
+                msg_date = msg["datetime"].date()
+                if self._end and msg_date > self._end:
                     break
-                elif self._start and  msg["datetime"].date() < self._start:
+                elif (
+                    (self._start and msg_date < self._start)
+                    or (last_imported is not None and msg["datetime"] <= last_imported)
+                ):
+                    self._prev_msg = msg
                     continue
 
                 # Now that we have a message to send, get/create the channel to send it to
@@ -632,6 +643,9 @@ class SlackImportClient(discord.Client):
                     # calculate next date separator based on the last message sent to the main channel
                     self._prev_msg = msg
 
+                # note that we've fully imported this message in the state
+                self._resume_state[chan_name] = msg["datetime"]
+
             if ch_webhook:
                 await ch_webhook.delete()
 
@@ -644,7 +658,45 @@ class SlackImportClient(discord.Client):
         )
 
 
-def run_import(*, zipfile, token, **kwargs):
+@contextlib.contextmanager
+def _resume_state(state_file):
+    resume_state = {}
+    if state_file:
+        with contextlib.suppress(FileNotFoundError):
+            with open(state_file, "rt") as fp:
+                resume_state = json.load(fp)
+
+    if resume_state:
+        __log__.info("Resuming import using state from '%s'", state_file)
+
+    # upconvert timestamps to datetimes
+    resume_state = {
+        c: datetime.fromtimestamp(float(t))
+        for c, t in resume_state.items()
+    }
+
+    try:
+        yield resume_state
+    finally:
+        # convert datetimes to timestamps
+        resume_state = {
+            c: dt.timestamp()
+            for c, dt in resume_state.items()
+        }
+        # output the state
+        output = json.dumps(resume_state)
+        if state_file:
+            with open(state_file, "wt") as fp:
+                fp.write(output)
+            __log__.info("Current import state written to '%s'", state_file)
+        else:
+            __log__.info(
+                "Importer exiting - to resume this import next time, provide the following state: %s",
+                output
+            )
+
+
+def run_import(*, zipfile, token, state_file, **kwargs):
     __log__.info("Extracting Slack export zip")
     with tempfile.TemporaryDirectory() as t:
         with ZipFile(zipfile, "r") as z:
@@ -672,7 +724,8 @@ def run_import(*, zipfile, token, **kwargs):
             )
 
         __log__.info("Logging the bot into Discord")
-        client = SlackImportClient(data_dir=t, **kwargs)
-        client.run(token, reconnect=False, log_handler=None)
-        if client._exception:
-            raise client._exception
+        with _resume_state(state_file) as resume_state:
+            client = SlackImportClient(data_dir=t, resume_state=resume_state, **kwargs)
+            client.run(token, reconnect=False, log_handler=None)
+            if client._exception:
+                raise client._exception
