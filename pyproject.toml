@@ -1,6 +1,6 @@
 [project]
 name = "slack-to-discord"
-version = "1.2.0"
+version = "1.3.0"
 description = "Extract data from a Slack export and import it into Discord"
 urls.Repository = "https://github.com/pR0Ps/slack-to-discord"
 urls.Changelog = "https://github.com/pR0Ps/slack-to-discord/blob/master/CHANGELOG.md"

@@ -1,6 +1,11 @@
 slack-to-discord changelog
 ==========================
 
+### v1.3.0
+ - Add a `-sf`/`--state-file` option to allow the state of the current import to be tracked in a
+   file. This enables easy retrying of failed imports, as well as allows updating the server with
+   only the new messages from a more recent export.
+
 ### v1.2.0
  - Modernize the build system
  - Add official support for the [slackdump](https://github.com/rusq/slackdump) project
