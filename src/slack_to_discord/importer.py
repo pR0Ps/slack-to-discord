@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import stat
 import tempfile
 import textwrap
 from zipfile import ZipFile
@@ -708,6 +709,10 @@ def run_import(*, zipfile, token, state_file, **kwargs):
                     # UTF-8 flag not set, cp437 was used to decode the filename
                     with contextlib.suppress(UnicodeEncodeError, UnicodeDecodeError):
                         zipinfo.filename = zipinfo.filename.encode("cp437").decode("utf-8")
+                if zipinfo.filename.startswith("/") or ".." in zipinfo.filename.split("/"):
+                    raise ValueError(f"Refusing unsafe member in export zip: {zipinfo.filename}")
+                if stat.S_ISLNK(zipinfo.external_attr >> 16):
+                    raise ValueError(f"Refusing symlink member in export zip: {zipinfo.filename}")
                 z.extract(zipinfo, path=t)
 
         # do some basic error checking of the export file before starting
@@ -729,3 +734,4 @@ def run_import(*, zipfile, token, state_file, **kwargs):
             client.run(token, reconnect=False, log_handler=None)
             if client._exception:
                 raise client._exception
+
